@@ -1,16 +1,18 @@
 import os
 import threading
-import time
 from queue import Queue
 
 from flask import (Flask, flash, jsonify, redirect, render_template, request,
                    session, url_for)
 
+# Diğer Python dosyalarımızdan ilgili sınıfı import ediyoruz
 from trading_bot import TradingBot
+import database
 
 # --- UYGULAMA KURULUMU ---
 app = Flask(__name__)
 # Bu anahtarı Render.com'da Environment Variable olarak ayarlayacaksınız
+# Web uygulamasının oturum (session) güvenliği için kullanılır
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'yerel_test_icin_rastgele_bir_anahtar_12345')
 
 # --- GÜVENLİK ---
@@ -22,11 +24,10 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 # Bu global değişkenler, web sunucusunun bot objesini ve loglarını hafızada tutmasını sağlar
 bot: TradingBot = None
 log_queue = Queue()
-bot_thread: threading.Thread = None
 
-def log_handler(message):
-    """Bot motorundan gelen logları arayüz için sıraya (queue) alır."""
-    log_queue.put(message)
+def log_handler(message_type, data=None):
+    """Bot motorundan gelen logları ve güncellemeleri arayüz için sıraya (queue) alır."""
+    log_queue.put({"type": message_type, "data": data})
 
 # --- WEB SAYFALARI (ROUTES) ---
 
@@ -40,7 +41,7 @@ def login():
             # Bot objesi sadece ilk başarılı girişte bir kez oluşturulur
             if bot is None:
                 try:
-                    bot = TradingBot(log_callback=log_handler)
+                    bot = TradingBot(ui_update_callback=log_handler)
                 except ValueError as e:
                     flash(str(e))
                     return render_template('login.html')
@@ -52,7 +53,9 @@ def login():
 @app.route('/')
 def index():
     """Ana sayfayı giriş sayfasına yönlendirir."""
-    return redirect(url_for('login'))
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    return redirect(url_for('dashboard'))
 
 @app.route('/dashboard')
 def dashboard():
@@ -75,13 +78,13 @@ def start_bot():
     if not session.get('logged_in'): return jsonify({"status": "error", "message": "Yetkisiz"}), 401
     if bot and not bot.strategy_active:
         # Botun ana strateji döngüsünü ayrı bir thread'de başlatır
-        threading.Thread(target=bot.run_strategy, daemon=True).start()
+        bot.start_strategy_loop()
     return jsonify({"status": "success"})
 
 @app.route('/stop_bot', methods=['POST'])
 def stop_bot():
     """Arayüzden gelen 'Durdur' komutunu işler."""
-    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    if not session.get('logged_in'): return jsonify({"status": "error", "message": "Yetkisiz"}), 401
     if bot:
         bot.stop_strategy_loop()
     return jsonify({"status": "success"})
@@ -91,74 +94,58 @@ def get_status():
     """Arayüzü beslemek için tüm anlık verileri (loglar, pozisyon durumu vb.) döndürür."""
     if not session.get('logged_in'): return jsonify({"status": "error"}), 401
     
-    logs = []
+    updates = []
     while not log_queue.empty():
-        logs.append(log_queue.get())
+        updates.append(log_queue.get())
     
     if bot:
         return jsonify({
-            "logs": logs,
+            "updates": updates,
             "bot_status": bot.strategy_active,
-            "active_symbol": bot.active_symbol,
-            "position": bot.get_current_position_data()
+            "open_positions": bot.get_current_position_data(),
+            "stats": database.calculate_stats()
         })
     # Bot henüz oluşmadıysa varsayılan boş değerleri döndür
-    return jsonify({"logs": logs, "bot_status": False, "active_symbol": "N/A", "position": None})
+    return jsonify({"updates": updates, "bot_status": False, "open_positions": [], "stats": database.calculate_stats()})
 
-@app.route('/get_all_symbols')
-def get_all_symbols():
-    """Binance'ten tüm USDT paritelerini çeker ve arayüze gönderir."""
+@app.route('/get_trade_history')
+def get_trade_history():
+    """Veritabanındaki tüm geçmiş işlemleri döndürür."""
     if not session.get('logged_in'): return jsonify({"status": "error"}), 401
-    if bot:
-        symbols = bot.get_all_usdt_symbols()
-        return jsonify({"symbols": symbols})
-    return jsonify({"symbols": []})
-
-@app.route('/update_symbol', methods=['POST'])
-def update_symbol():
-    """Arayüzden seçilen yeni sembolü botta aktif hale getirir."""
-    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
-    data = request.get_json()
-    new_symbol = data.get('symbol')
-    if bot and new_symbol:
-        bot.update_active_symbol(new_symbol)
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error", "message": "Sembol güncellenemedi."}), 400
-
-@app.route('/manual_trade', methods=['POST'])
-def manual_trade():
-    """Arayüzden gelen manuel işlem talebini işler."""
-    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
-    data = request.get_json()
-    side = data.get('side')
-    if bot and side in ['LONG', 'SHORT']:
-        threading.Thread(target=bot.manual_trade, args=(side,), daemon=True).start()
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error", "message": "Geçersiz işlem yönü."}), 400
-
-@app.route('/close_position', methods=['POST'])
-def close_position():
-    """Açık pozisyonu kapatma komutunu işler."""
-    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
-    if bot:
-        threading.Thread(target=bot.close_current_position, args=(True,), daemon=True).start()
-    return jsonify({"status": "success"})
+    trades = database.get_all_trades()
+    return jsonify({"history": trades})
 
 @app.route('/update_settings', methods=['POST'])
 def update_settings():
-    """Arayüzden gelen kaldıraç ve miktar ayarlarını günceller."""
+    """Arayüzden gelen tüm ayarları günceller."""
     if not session.get('logged_in'): return jsonify({"status": "error"}), 401
     data = request.get_json()
     if bot:
         try:
-            leverage = int(data.get('leverage'))
-            quantity_usd = float(data.get('quantity_usd'))
-            bot.set_leverage(leverage, bot.active_symbol)
-            bot.set_quantity(quantity_usd)
-            return jsonify({"status": "success"})
-        except (ValueError, TypeError):
-            return jsonify({"status": "error", "message": "Geçersiz değerler."}), 400
+            bot.update_settings(data)
+            return jsonify({"status": "success", "message": "Ayarlar başarıyla güncellendi."})
+        except (ValueError, TypeError) as e:
+            return jsonify({"status": "error", "message": f"Geçersiz değerler: {e}"}), 400
     return jsonify({"status": "error", "message": "Bot aktif değil."}), 400
+
+@app.route('/update_tradeable_symbols', methods=['POST'])
+def update_tradeable_symbols():
+    """İşlem yapılacak coin listesini günceller."""
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    data = request.get_json()
+    symbols_str = data.get('symbols')
+    if bot and isinstance(symbols_str, str):
+        bot.update_tradeable_symbols(symbols_str)
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error"}), 400
+
+@app.route('/close_all_positions', methods=['POST'])
+def close_all_positions():
+    """Tüm açık pozisyonları kapatma komutunu işler."""
+    if not session.get('logged_in'): return jsonify({"status": "error"}), 401
+    if bot:
+        threading.Thread(target=bot.close_all_positions, daemon=True).start()
+    return jsonify({"status": "success"})
 
 if __name__ == '__main__':
     # Bu kısım sadece yerel testler içindir. 
