@@ -1,45 +1,45 @@
-# screener.py
-
 from binance.client import Client
-from typing import Optional, List
+from typing import Optional
 
-def find_top_volatile_coins(api_key: str, api_secret: str, testnet: bool, count: int = 5) -> List[str]:
+def find_most_volatile_coin(api_key: str, api_secret: str, testnet: bool) -> Optional[str]:
     """
-    Binance Futures'taki son 24 saatte en çok yüzde değişimi yaşamış,
-    belirtilen sayıda USDT paritesini bulur.
+    Binance Futures'taki son 24 saatte en çok yüzde değişimi yaşamış
+    USDT paritesini bulur.
 
     Args:
         api_key (str): Kullanıcının Binance API anahtarı.
         api_secret (str): Kullanıcının Binance gizli anahtarı.
         testnet (bool): Testnet'e bağlanılıp bağlanılmayacağını belirtir.
-        count (int): Döndürülecek en volatil coin sayısı.
 
     Returns:
-        List[str]: En hareketli coinlerin sembol listesini (örn: ['BTCUSDT', 'ETHUSDT'])
-                   veya bir hata durumunda boş bir liste döndürür.
+        Optional[str]: En hareketli coinin sembolünü (örn: 'BTCUSDT') veya 
+                       bir hata durumunda None döndürür.
     """
     try:
+        # Geçici bir Binance istemcisi oluştur
         client = Client(api_key, api_secret, testnet=testnet)
+        
+        # Tüm vadeli işlem paritelerinin son 24 saatlik verilerini çek
         tickers = client.futures_ticker()
         
+        # Sadece USDT ile biten ve BUSD gibi istenmeyenleri içermeyen pariteleri filtrele
         usdt_tickers = [
             ticker for ticker in tickers 
-            if ticker['symbol'].endswith('USDT') and 'BUSD' not in ticker['symbol'] and 'USDC' not in ticker['symbol']
+            if ticker['symbol'].endswith('USDT') and 'BUSD' not in ticker['symbol']
         ]
         
         if not usdt_tickers:
             print("Tarayıcı: Uygun USDT paritesi bulunamadı.")
-            return []
+            return None
             
-        # Fiyat değişim yüzdesine göre en hareketli coinleri sırala
-        # abs() ile hem pozitif hem de negatif yöndeki en büyük değişime bakıyoruz
-        sorted_tickers = sorted(usdt_tickers, key=lambda x: abs(float(x['priceChangePercent'])), reverse=True)
+        # Fiyat değişim yüzdesine göre en hareketli coini bul
+        # abs() fonksiyonu ile hem pozitif hem de negatif yöndeki en büyük değişime bakıyoruz
+        most_volatile_coin = max(usdt_tickers, key=lambda x: abs(float(x['priceChangePercent'])))
         
-        # En hareketli 'count' kadar coinin sembolünü al
-        top_coins = [ticker['symbol'] for ticker in sorted_tickers[:count]]
-        
-        return top_coins
+        # En hareketli coinin sembolünü döndür
+        return most_volatile_coin['symbol']
         
     except Exception as e:
+        # Bir hata oluşursa (örn: ağ hatası), konsola yazdır ve None döndür
         print(f"Coin tarayıcı hatası: {e}")
-        return []
+        return None
