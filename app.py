@@ -1,11 +1,11 @@
 import os
 import threading
 from queue import Queue
-
+import time
 from flask import (Flask, flash, jsonify, redirect, render_template, request,
                    session, url_for)
 
-# Diğer Python dosyalarımızdan ilgili sınıfı import ediyoruz
+# Diğer Python dosyalarımızdan ilgili sınıfları ve fonksiyonları import ediyoruz
 from trading_bot import TradingBot
 import database
 
@@ -25,8 +25,9 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 bot: TradingBot = None
 log_queue = Queue()
 
-def log_handler(message_type, data=None):
+def ui_callback_handler(message_type, data=None):
     """Bot motorundan gelen logları ve güncellemeleri arayüz için sıraya (queue) alır."""
+    # Bu fonksiyon, trading_bot tarafından çağrılacak ve verileri arayüze iletecek
     log_queue.put({"type": message_type, "data": data})
 
 # --- WEB SAYFALARI (ROUTES) ---
@@ -41,7 +42,8 @@ def login():
             # Bot objesi sadece ilk başarılı girişte bir kez oluşturulur
             if bot is None:
                 try:
-                    bot = TradingBot(ui_update_callback=log_handler)
+                    # DÜZELTME: Doğru argüman adını kullan: ui_update_callback
+                    bot = TradingBot(ui_update_callback=ui_callback_handler)
                 except ValueError as e:
                     flash(str(e))
                     return render_template('login.html')
@@ -77,7 +79,6 @@ def start_bot():
     """Arayüzden gelen 'Başlat' komutunu işler."""
     if not session.get('logged_in'): return jsonify({"status": "error", "message": "Yetkisiz"}), 401
     if bot and not bot.strategy_active:
-        # Botun ana strateji döngüsünü ayrı bir thread'de başlatır
         bot.start_strategy_loop()
     return jsonify({"status": "success"})
 
@@ -105,7 +106,6 @@ def get_status():
             "open_positions": bot.get_current_position_data(),
             "stats": database.calculate_stats()
         })
-    # Bot henüz oluşmadıysa varsayılan boş değerleri döndür
     return jsonify({"updates": updates, "bot_status": False, "open_positions": [], "stats": database.calculate_stats()})
 
 @app.route('/get_trade_history')
