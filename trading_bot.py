@@ -18,8 +18,8 @@ class TradingBot:
     Web arayüzü ile kontrol edilen, çoklu işlem ve gelişmiş risk yönetimi 
     yeteneğine sahip, sunucuda 7/24 çalışmak üzere tasarlanmış V3 ticaret motoru.
     """
-    def __init__(self, ui_update_callback: Optional[Callable] = None) -> None:
-        self.ui_update_callback = ui_update_callback
+    def __init__(self, log_callback: Optional[Callable] = None) -> None:
+        self.log_callback = log_callback
         self.config = self._load_config()
         
         # GÜVENLİK: API anahtarlarını ortam değişkenlerinden (sunucudan) oku
@@ -66,8 +66,8 @@ class TradingBot:
     def _log(self, message: str) -> None:
         log_message = f"{time.strftime('%H:%M:%S')} - {message}"
         print(log_message)
-        if self.ui_update_callback:
-            self.ui_update_callback("log", log_message)
+        if self.log_callback:
+            self.log_callback("log", log_message)
 
     def get_all_usdt_symbols(self) -> List[str]:
         try:
