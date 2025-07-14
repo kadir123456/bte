@@ -1,62 +1,47 @@
+# trading_bot.py
+
 import os
 import configparser
 import time
 import pandas as pd
 from binance.client import Client
 from binance.enums import *
+from binance.exceptions import BinanceAPIException
 import strategy as strategy_kadir_v2
 import strategy_scalper
 import database
 import screener
-from typing import Callable, Optional, List, Dict
+from typing import Callable, Optional, List
 from requests.exceptions import RequestException
 import threading
-import math
 
 class TradingBot:
     """
-    Web arayüzü ile kontrol edilen, çoklu işlem ve gelişmiş risk yönetimi 
-    yeteneğine sahip, sunucuda 7/24 çalışmak üzere tasarlanmış V3 ticaret motoru.
+    Web arayüzü ile kontrol edilen, sunucuda 7/24 çalışmak üzere tasarlanmış,
+    gelişmiş ticaret botu motoru.
     """
     def __init__(self, log_callback: Optional[Callable] = None) -> None:
         self.log_callback = log_callback
         self.config = self._load_config()
         
-        # GÜVENLİK: API anahtarlarını ortam değişkenlerinden (sunucudan) oku
-        self.api_key = os.environ.get('BINANCE_API_KEY')
-        self.api_secret = os.environ.get('BINANCE_API_SECRET')
+        api_key = os.environ.get('BINANCE_API_KEY')
+        api_secret = os.environ.get('BINANCE_API_SECRET')
         
-        if not self.api_key or not self.api_secret:
-            self._log("HATA: Sunucu ortam değişkenlerinde API anahtarları bulunamadı!")
+        if not api_key or not api_secret:
+            self._log("HATA: Sunucu ortam değişkenlerinde BINANCE_API_KEY ve BINANCE_API_SECRET bulunamadı!")
             raise ValueError("API anahtarları eksik.")
             
-        self.is_testnet = 'testnet' in self.config['BINANCE']['api_url']
-        self.client = Client(self.api_key, self.api_secret, testnet=self.is_testnet)
+        self.is_testnet = self.config.getboolean('BINANCE', 'testnet', fallback=False)
+        self.client = Client(api_key, api_secret, testnet=self.is_testnet)
         
-        # Botun durumunu ve ayarlarını tutan değişkenler
-        self.running: bool = True
         self.strategy_active: bool = False
-        
-        # V3 Ayarları
-        self.leverage = self.config['TRADING'].getint('leverage', 10)
-        self.margin_type = self.config['TRADING'].get('margin_type', 'ISOLATED')
-        self.quantity_per_trade_usd = self.config['TRADING'].getfloat('quantity_per_trade_usd', 20)
-        self.max_concurrent_trades = self.config['TRADING'].getint('max_concurrent_trades', 3)
-        self.tradeable_symbols_config = self.config['TRADING'].get('tradeable_symbols', 'XRPUSDT')
-        
-        # Risk Yönetimi Ayarları
-        self.profit_strategy = self.config['RISK_MANAGEMENT'].get('profit_strategy', 'trailing_stop')
-        self.fixed_take_profit_pct = self.config['RISK_MANAGEMENT'].getfloat('fixed_take_profit_pct', 2.0) / 100
-        self.fixed_stop_loss_pct = self.config['RISK_MANAGEMENT'].getfloat('fixed_stop_loss_pct', 1.0) / 100
-        self.trailing_stop_trigger_pct = self.config['RISK_MANAGEMENT'].getfloat('trailing_stop_trigger_pct', 1.5) / 100
-        self.trailing_stop_distance_pct = self.config['RISK_MANAGEMENT'].getfloat('trailing_stop_distance_pct', 0.5) / 100
-
-        # Aktif pozisyonları ve iz süren stopları takip etmek için sözlük (dictionary)
-        self.open_positions: Dict[str, Dict] = {}
+        self.position_lock = threading.Lock() # Pozisyon kontrolü için thread-safe kilit
+        self.active_symbol = self.config['TRADING']['symbol']
+        self.active_strategy_name = self.config['TRADING']['active_strategy']
+        self.quantity_usd = float(self.config['TRADING']['quantity_usd'])
         
         self._log("Bot objesi başarıyla oluşturuldu.")
-        # Arka planda anlık veri akışını başlat
-        threading.Thread(target=self._stream_position_data, daemon=True).start()
+        self._log(f"Testnet Modu: {'Aktif' if self.is_testnet else 'Pasif'}")
 
     def _load_config(self) -> configparser.ConfigParser:
         parser = configparser.ConfigParser()
@@ -64,7 +49,7 @@ class TradingBot:
         return parser
 
     def _log(self, message: str) -> None:
-        log_message = f"{time.strftime('%H:%M:%S')} - {message}"
+        log_message = f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}"
         print(log_message)
         if self.log_callback:
             self.log_callback(log_message)
@@ -72,265 +57,273 @@ class TradingBot:
     def get_all_usdt_symbols(self) -> List[str]:
         try:
             info = self.client.futures_exchange_info()
-            return sorted([s['symbol'] for s in info['symbols'] if s['symbol'].endswith('USDT') and 'BUSD' not in s['symbol']])
+            symbols = [s['symbol'] for s in info['symbols'] if s['symbol'].endswith('USDT') and 'BUSD' not in s['symbol']]
+            return sorted(symbols)
         except Exception as e:
-            self._log(f"HATA: Sembol listesi çekilemedi: {e}"); return []
-
-    def get_current_position_data(self) -> List[dict]:
-        """Tüm açık pozisyonların anlık verilerini arayüz için hazırlar."""
-        try:
-            all_positions = self.client.futures_account()['positions']
-            open_positions_data = []
-            for position in all_positions:
-                if float(position['positionAmt']) != 0:
-                    pnl = float(position['unrealizedProfit'])
-                    roi = (pnl / (float(position['initialMargin']) + 1e-9)) * 100
-                    pos_data = {
-                        "symbol": position['symbol'], "quantity": position['positionAmt'],
-                        "entry_price": position['entryPrice'], "mark_price": position['markPrice'],
-                        "pnl_usdt": f"{pnl:.2f}", "roi_percent": f"{roi:.2f}%"
-                    }
-                    open_positions_data.append(pos_data)
-            return open_positions_data
-        except Exception:
+            self._log(f"HATA: Sembol listesi çekilemedi: {e}")
             return []
 
-    def _get_market_data(self, symbol: str, timeframe: str) -> Optional[pd.DataFrame]:
+    def update_active_symbol(self, new_symbol: str):
+        if self.strategy_active:
+            self._log("UYARI: Strateji çalışırken sembol değiştirilemez. Lütfen önce stratejiyi durdurun.")
+            return
+        self.active_symbol = new_symbol.upper()
+        self._log(f"✅ Aktif sembol {self.active_symbol} olarak ayarlandı.")
+
+    def get_current_position_data(self) -> Optional[dict]:
         try:
-            klines = self.client.futures_klines(symbol=symbol, interval=timeframe, limit=200)
+            all_positions = self.client.futures_account()['positions']
+            position = next((p for p in all_positions if float(p['positionAmt']) != 0), None)
+            
+            if not position: return None
+
+            tp_sl_orders = self.client.futures_get_open_orders(symbol=position['symbol'])
+            tp_order = next((o for o in tp_sl_orders if o['origType'] == 'TAKE_PROFIT_MARKET'), None)
+            sl_order = next((o for o in tp_sl_orders if o['origType'] == 'STOP_MARKET'), None)
+            pnl = float(position['unrealizedProfit'])
+            entry_price = float(position['entryPrice'])
+            leverage = int(position['leverage'])
+            initial_margin = (float(position['positionAmt']) * entry_price) / leverage
+            roi = (pnl / (initial_margin + 1e-9)) * 100
+            
+            return {
+                "symbol": position['symbol'], "quantity": position['positionAmt'], "entry_price": f"{entry_price:.5f}",
+                "mark_price": f"{float(position['markPrice']):.5f}", "pnl_usdt": f"{pnl:.2f}", "roi_percent": f"{roi:.2f}",
+                "sl_price": sl_order['stopPrice'] if sl_order else "N/A", "tp_price": tp_order['stopPrice'] if tp_order else "N/A",
+                "leverage": leverage
+            }
+        except Exception as e:
+            self._log(f"Pozisyon verisi alınırken hata: {e}")
+            return None
+
+    def get_active_strategy_signal(self, df: pd.DataFrame) -> tuple:
+        strategy_config_name = f"STRATEGY_{self.active_strategy_name}"
+        if self.active_strategy_name == 'Scalper' and strategy_config_name in self.config:
+            return strategy_scalper.get_signal(df, self.config[strategy_config_name])
+        elif self.active_strategy_name == 'KadirV2' and strategy_config_name in self.config:
+            return strategy_kadir_v2.get_signal(df, self.config[strategy_config_name])
+        else: # Varsayılan veya tanımsız strateji durumu
+            self._log(f"UYARI: Config dosyasında '{self.active_strategy_name}' için ayar bulunamadı. KadirV2 kullanılıyor.")
+            return strategy_kadir_v2.get_signal(df, self.config['STRATEGY_KadirV2'])
+
+    def _get_market_data(self, symbol: str, timeframe: str, limit: int = 200) -> Optional[pd.DataFrame]:
+        try:
+            klines = self.client.futures_klines(symbol=symbol, interval=timeframe, limit=limit)
             df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
             numeric_cols = ['open', 'high', 'low', 'close', 'volume']
             df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
             return df
         except Exception as e:
             self._log(f"HATA: Piyasa verileri çekilemedi ({symbol}): {e}"); return None
-
-    def calculate_quantity(self, symbol: str) -> Optional[float]:
-        trade_usd = self.quantity_per_trade_usd
+            
+    def _calculate_quantity(self, symbol: str) -> float:
+        """Verilen USD miktarına göre pozisyon büyüklüğünü hesaplar."""
         try:
-            price_info = self.client.futures_mark_price(symbol=symbol)
-            current_price = float(price_info['markPrice'])
-            
-            if trade_usd < 5.1:
-                 self._log(f"UYARI: İşlem büyüklüğü ({trade_usd:.2f}$) çok düşük. Minimum ~5 USDT olmalıdır."); return None
-
-            quantity = trade_usd / current_price
-            
-            info = self.client.futures_exchange_info()
-            symbol_info = next(item for item in info['symbols'] if item['symbol'] == symbol)
-            
-            min_qty, step_size = 0.0, 0.1
-            for f in symbol_info['filters']:
-                if f['filterType'] == 'LOT_SIZE':
-                    min_qty = float(f['minQty']); step_size = float(f['stepSize']); break
-            
-            if quantity < min_qty:
-                self._log(f"UYARI: Hesaplanan miktar ({quantity:.4f}) {symbol} için minimum ({min_qty})'dan daha az."); return None
-
-            precision = int(round(-math.log(step_size, 10), 0)) if step_size > 0 else 0
-            return round(quantity, precision)
+            ticker = self.client.futures_ticker(symbol=symbol)
+            price = float(ticker['lastPrice'])
+            # Miktarı 4 ondalık basamağa yuvarla
+            return round(self.quantity_usd / price, 4)
         except Exception as e:
-            self._log(f"HATA: Miktar hesaplanamadı ({symbol}): {e}"); return None
-            
-    def open_position(self, symbol: str, signal: str, atr: float, quantity: float) -> None:
-        side = SIDE_BUY if signal == 'LONG' else SIDE_SELL
+            self._log(f"HATA: Miktar hesaplanamadı: {e}")
+            return 0.0
+
+    def _manage_position(self, signal: str, atr_value: float):
+        """Sinyale göre pozisyon açma/kapatma/tersine çevirme mantığını yönetir."""
+        with self.position_lock:
+            try:
+                position = self.client.futures_position_information(symbol=self.active_symbol)[0]
+                pos_amount = float(position['positionAmt'])
+            except Exception as e:
+                self._log(f"HATA: Pozisyon bilgisi alınamadı: {e}")
+                return
+
+            if signal == 'LONG' and pos_amount == 0:
+                self._open_position('BUY', atr_value)
+            elif signal == 'SHORT' and pos_amount == 0:
+                self._open_position('SELL', atr_value)
+            elif signal == 'SHORT' and pos_amount > 0: # Long pozisyonu kapatıp Short aç
+                self._close_position_and_log(f"Sinyal değişti, LONG kapatılıyor.")
+                self._open_position('SELL', atr_value)
+            elif signal == 'LONG' and pos_amount < 0: # Short pozisyonu kapatıp Long aç
+                self._close_position_and_log(f"Sinyal değişti, SHORT kapatılıyor.")
+                self._open_position('BUY', atr_value)
+
+    def _open_position(self, side: str, atr: float):
+        quantity = self._calculate_quantity(self.active_symbol)
+        if quantity <= 0: return
+
         try:
-            self.client.futures_change_leverage(symbol=symbol, leverage=self.leverage)
-            self.client.futures_change_margin_type(symbol=symbol, marginType=self.margin_type)
-            self._log(f"[{symbol}] Pozisyon açılıyor: {signal}, {self.margin_type}, {self.leverage}x")
+            self._log(f"POZİSYON AÇILIYOR: {side} {quantity} {self.active_symbol}")
+            order = self.client.futures_create_order(
+                symbol=self.active_symbol, side=side, type=ORDER_TYPE_MARKET, quantity=quantity
+            )
             
-            self.client.futures_create_order(symbol=symbol, side=side, type=ORDER_TYPE_MARKET, quantity=quantity)
+            # TP/SL Ayarla
+            time.sleep(1) # Siparişin dolması için kısa bir bekleme
+            self._set_tp_sl(side, atr)
             
-            time.sleep(1)
-            position = next((p for p in self.client.futures_account()['positions'] if p['symbol'] == symbol), None)
-            entry_price = float(position['entryPrice']) if position else 0
-            if entry_price == 0: self._log("HATA: Giriş fiyatı alınamadı, TP/SL ayarlanamıyor."); return
+        except BinanceAPIException as e:
+            self._log(f"HATA: Pozisyon açılamadı: {e.status_code} - {e.message}")
+        except Exception as e:
+            self._log(f"BEKLENMEDİK HATA: Pozisyon açma sırasında: {e}")
 
-            self._log(f"[{symbol}] POZİSYON AÇILDI - Giriş: {entry_price}")
-            self.open_positions[symbol] = {'entry_price': entry_price, 'quantity': quantity}
-
-            if self.profit_strategy == 'fixed_roi':
-                if signal == 'LONG':
-                    tp_price = entry_price * (1 + self.fixed_take_profit_pct)
-                    sl_price = entry_price * (1 - self.fixed_stop_loss_pct)
-                else:
-                    tp_price = entry_price * (1 - self.fixed_take_profit_pct)
-                    sl_price = entry_price * (1 + self.fixed_stop_loss_pct)
-                self._log(f"[{symbol}] Sabit Hedefler: TP: {tp_price:.4f}, SL: {sl_price:.4f}")
-            else: # ATR Modu
-                strategy_config = self.config["STRATEGY_KadirV2"] # Varsayılan olarak bunu kullanıyoruz
-                atr_multiplier_sl = float(strategy_config['atr_multiplier_sl'])
-                sl_distance = atr * atr_multiplier_sl
-                if signal == 'LONG':
-                    sl_price = entry_price - sl_distance
-                else:
-                    sl_price = entry_price + sl_distance
-                tp_price = None 
-                self._log(f"[{symbol}] Dinamik Hedefler: SL: {sl_price:.4f} (TP iz süren stop ile yönetilecek)")
+    def _set_tp_sl(self, side: str, atr: float):
+        """Verilen bilgilere göre TP ve SL emirlerini oluşturur."""
+        try:
+            position = self.client.futures_position_information(symbol=self.active_symbol)[0]
+            entry_price = float(position['entryPrice'])
             
-            info = self.client.futures_exchange_info()
-            symbol_info = next(item for item in info['symbols'] if item['symbol'] == symbol)
-            price_precision = int(symbol_info['pricePrecision'])
-            sl_price = round(sl_price, price_precision)
+            rm_mode = self.config['TRADING']['risk_management_mode']
+            
+            if side == 'BUY':
+                close_side = 'SELL'
+                if rm_mode == 'atr':
+                    strategy_config = self.config[f'STRATEGY_{self.active_strategy_name}']
+                    sl_multiplier = float(strategy_config['atr_multiplier_sl'])
+                    tp_multiplier = float(strategy_config.get('atr_multiplier_tp', sl_multiplier * 2)) # TP çarpanı yoksa SL'in 2 katı
+                    
+                    sl_price = entry_price - (atr * sl_multiplier)
+                    tp_price = entry_price + (atr * tp_multiplier)
+                else: # fixed_roi
+                    roi_tp = float(self.config['TRADING']['fixed_roi_tp'])
+                    tp_price = entry_price * (1 + roi_tp / 100)
+                    # Sabit ROI modunda SL manuel olarak ayarlanabilir veya ihmal edilebilir. Bu örnekte ihmal ediyoruz.
+                    sl_price = None
 
-            close_side = SIDE_SELL if signal == 'LONG' else SIDE_BUY
+            else: # SELL
+                close_side = 'BUY'
+                if rm_mode == 'atr':
+                    strategy_config = self.config[f'STRATEGY_{self.active_strategy_name}']
+                    sl_multiplier = float(strategy_config['atr_multiplier_sl'])
+                    tp_multiplier = float(strategy_config.get('atr_multiplier_tp', sl_multiplier * 2))
+
+                    sl_price = entry_price + (atr * sl_multiplier)
+                    tp_price = entry_price - (atr * tp_multiplier)
+                else: # fixed_roi
+                    roi_tp = float(self.config['TRADING']['fixed_roi_tp'])
+                    tp_price = entry_price * (1 - roi_tp / 100)
+                    sl_price = None
+
+            # TP/SL Emirlerini Gönder
+            batch_orders = []
             if tp_price:
-                tp_price = round(tp_price, price_precision)
-                self.client.futures_create_order(symbol=symbol, side=close_side, type=FUTURE_ORDER_TYPE_TAKE_PROFIT_MARKET, stopPrice=tp_price, closePosition=True)
-            
-            self.client.futures_create_order(symbol=symbol, side=close_side, type=FUTURE_ORDER_TYPE_STOP_MARKET, stopPrice=sl_price, closePosition=True)
-            self._log(f"[{symbol}] Koruma emirleri başarıyla yerleştirildi.")
+                batch_orders.append({
+                    'symbol': self.active_symbol, 'side': close_side, 'type': 'TAKE_PROFIT_MARKET',
+                    'stopPrice': f"{tp_price:.5f}", 'closePosition': True
+                })
+            if sl_price:
+                 batch_orders.append({
+                    'symbol': self.active_symbol, 'side': close_side, 'type': 'STOP_MARKET',
+                    'stopPrice': f"{sl_price:.5f}", 'closePosition': True
+                })
+
+            if batch_orders:
+                self.client.futures_create_batch_order(batchOrders=batch_orders)
+                self._log(f"✅ TP ({tp_price:.4f}) ve SL ({sl_price:.4f}) emirleri ayarlandı.")
+
+        except BinanceAPIException as e:
+            self._log(f"HATA: TP/SL ayarlanamadı: {e.message}")
         except Exception as e:
-            self._log(f"HATA: Pozisyon açma hatası ({symbol}) - {e}")
+            self._log(f"BEKLENMEDİK HATA: TP/SL ayarlanırken: {e}")
 
-    def check_and_update_pnl(self, symbol: str, entry_price: float, quantity: float):
-        try:
-            closing_trade = next((t for t in reversed(self.client.futures_account_trades(symbol=symbol, limit=5)) if float(t['realizedPnl']) != 0), None)
-            if closing_trade:
-                closing_trade['symbol'] = symbol
-                closing_trade['entryPrice'] = entry_price
-                closing_trade['qty'] = quantity
-                database.add_trade(closing_trade)
-                pnl = float(closing_trade['realizedPnl'])
-                self._log(f"KAPALI İŞLEM: {symbol} - {'✅ KÂR' if pnl > 0 else '❌ ZARAR'}: {pnl:.2f} USDT.")
-                if self.ui_update_callback:
-                    self.ui_update_callback("history_update", None)
-        except Exception as e:
-            self._log(f"HATA: PNL kontrol edilemedi ({symbol}): {e}")
+    def _close_position_and_log(self, reason: str):
+        """Pozisyonu piyasa emriyle kapatır ve veritabanına kaydeder."""
+        with self.position_lock:
+            try:
+                # 1. Açık tüm TP/SL emirlerini iptal et
+                self.client.futures_cancel_all_open_orders(symbol=self.active_symbol)
 
-    def close_all_positions(self):
-        self._log("!!! Tüm pozisyonları kapatma talebi alındı !!!")
-        try:
-            positions = self.client.futures_position_information()
-            for pos in positions:
-                if float(pos['positionAmt']) != 0:
-                    symbol = pos['symbol']
-                    pos_amount = float(pos['positionAmt'])
-                    side = SIDE_SELL if pos_amount > 0 else SIDE_BUY
-                    self.client.futures_cancel_all_open_orders(symbol=symbol)
-                    self.client.futures_create_order(symbol=symbol, side=side, type=ORDER_TYPE_MARKET, quantity=abs(pos_amount))
-                    self._log(f"✅ {symbol} pozisyonu kapatıldı.")
-        except Exception as e:
-            self._log(f"HATA: Tüm pozisyonlar kapatılırken hata oluştu: {e}")
+                # 2. Pozisyon bilgisini al
+                position = self.client.futures_position_information(symbol=self.active_symbol)[0]
+                pos_amount = float(position['positionAmt'])
+                
+                if pos_amount == 0: return
 
-    def update_settings(self, settings: dict):
-        try:
-            self.leverage = int(settings.get('leverage', self.leverage))
-            self.quantity_per_trade_usd = float(settings.get('quantity_per_trade_usd', self.quantity_per_trade_usd))
-            self.max_concurrent_trades = int(settings.get('max_concurrent_trades', self.max_concurrent_trades))
-            self.margin_type = settings.get('margin_type', self.margin_type).upper()
-            self.profit_strategy = settings.get('profit_strategy', self.profit_strategy)
-            self.fixed_take_profit_pct = float(settings.get('fixed_take_profit_pct', self.fixed_roi_tp * 100)) / 100
-            self.fixed_stop_loss_pct = float(settings.get('fixed_stop_loss_pct', (self.fixed_roi_tp / 2) * 100)) / 100
-            self.tradeable_symbols_config = settings.get('tradeable_symbols', self.tradeable_symbols_config)
-            self._log("✅ Ayarlar başarıyla güncellendi.")
-        except Exception as e:
-            self._log(f"❌ HATA: Ayarlar güncellenirken hata oluştu: {e}")
+                side = 'SELL' if pos_amount > 0 else 'BUY'
+                quantity = abs(pos_amount)
+                
+                # 3. Pozisyonu kapatma emrini gönder
+                self.client.futures_create_order(
+                    symbol=self.active_symbol, side=side, type=ORDER_TYPE_MARKET, quantity=quantity
+                )
+                self._log(f"POZİSYON KAPATILDI ({reason}).")
 
-    def _handle_trailing_stop(self, position: dict):
-        symbol = position['symbol']
-        pos_data = self.open_positions.get(symbol)
-        if not pos_data: return
+                # 4. Kâr/Zarar bilgisini alıp veritabanına ekle
+                time.sleep(2) # Trade geçmişinin güncellenmesi için bekle
+                trades = self.client.futures_account_trades(symbol=self.active_symbol, limit=5)
+                # En son 'realizedPnl' > 0 olan trade'i bul
+                last_trade = next((t for t in reversed(trades) if float(t['realizedPnl']) != 0), None)
+                if last_trade:
+                    database.add_trade(last_trade)
+                    self._log(f"💾 İşlem geçmişe kaydedildi. PNL: {last_trade['realizedPnl']} USDT")
 
-        current_pnl_roi = (float(position['unrealizedProfit']) / (float(position['initialMargin']) + 1e-9))
-        current_mark_price = float(position['markPrice'])
-        side = "LONG" if float(position['positionAmt']) > 0 else "SHORT"
+            except BinanceAPIException as e:
+                self._log(f"HATA: Pozisyon kapatılamadı: {e.message}")
+            except Exception as e:
+                self._log(f"BEKLENMEDİK HATA: Pozisyon kapatılırken: {e}")
 
-        if not pos_data.get('trailing_active') and current_pnl_roi >= self.trailing_stop_trigger_pct:
-            self.client.futures_cancel_all_open_orders(symbol=symbol)
-            new_sl_price = 0
-            if side == "LONG":
-                new_sl_price = float(position['entryPrice']) * 1.001
-            else:
-                new_sl_price = float(position['entryPrice']) * 0.999
-            
-            info = self.client.futures_exchange_info()
-            symbol_info = next(item for item in info['symbols'] if item['symbol'] == symbol)
-            price_precision = int(symbol_info['pricePrecision'])
-            new_sl_price = round(new_sl_price, price_precision)
-            
-            self.client.futures_create_order(symbol=symbol, side=SIDE_SELL if side == "LONG" else SIDE_BUY, type=FUTURE_ORDER_TYPE_STOP_MARKET, stopPrice=new_sl_price, closePosition=True)
-            self.open_positions[symbol]['trailing_active'] = True
-            self.open_positions[symbol]['trailing_sl'] = new_sl_price
-            self._log(f"[{symbol}] ✅ KÂRA GEÇİLDİ! İz Süren Stop {new_sl_price} fiyatında aktif edildi.")
-
-        elif pos_data.get('trailing_active'):
-            new_trailing_sl = 0
-            if side == "LONG" and current_mark_price > pos_data.get('highest_price', 0):
-                new_trailing_sl = current_mark_price * (1 - self.trailing_stop_distance_pct)
-                self.open_positions[symbol]['highest_price'] = current_mark_price
-            elif side == "SHORT" and current_mark_price < pos_data.get('lowest_price', float('inf')):
-                new_trailing_sl = current_mark_price * (1 + self.trailing_stop_distance_pct)
-                self.open_positions[symbol]['lowest_price'] = current_mark_price
-
-            if new_trailing_sl != 0 and ( (side == "LONG" and new_trailing_sl > pos_data['trailing_sl']) or (side == "SHORT" and new_trailing_sl < pos_data['trailing_sl']) ):
-                self.client.futures_cancel_all_open_orders(symbol=symbol)
-                self.client.futures_create_order(symbol=symbol, side=SIDE_SELL if side == "LONG" else SIDE_BUY, type=FUTURE_ORDER_TYPE_STOP_MARKET, stopPrice=new_trailing_sl, closePosition=True)
-                self.open_positions[symbol]['trailing_sl'] = new_trailing_sl
-                self._log(f"[{symbol}] 📈 KÂR ARTIYOR! İz Süren Stop {new_trailing_sl} seviyesine güncellendi.")
 
     def run_strategy(self):
+        """Sadece otomatik strateji mantığını çalıştıran ana döngü."""
         self.strategy_active = True
-        self._log(f"Otomatik strateji motoru V3 çalıştırıldı.")
+        self._log(f"Otomatik strateji ({self.active_strategy_name}) çalıştırıldı. Sembol: {self.active_symbol}")
         
         while self.strategy_active:
             try:
-                current_positions = {p['symbol']: p for p in self.client.futures_account()['positions'] if float(p['positionAmt']) != 0}
+                strategy_config = self.config[f'STRATEGY_{self.active_strategy_name}']
+                timeframe = strategy_config['timeframe']
+                df = self._get_market_data(self.active_symbol, timeframe)
                 
-                closed_symbols = set(self.open_positions.keys()) - set(current_positions.keys())
-                for symbol in closed_symbols:
-                    self._log(f"Pozisyon kapandı: {symbol}")
-                    pos_info = self.open_positions.pop(symbol, {})
-                    self.check_and_update_pnl(symbol, pos_info.get('entry_price', 0), pos_info.get('quantity', 0))
+                if df is None or df.empty:
+                    self._log("Piyasa verisi alınamadı, 15 saniye sonra yeniden denenecek.")
+                    time.sleep(15)
+                    continue
+
+                signal, atr_value = self.get_active_strategy_signal(df)
+                self._log(f"[{self.active_symbol} | {self.active_strategy_name} | {timeframe}] Sinyal: {signal}")
+
+                self._manage_position(signal, atr_value)
                 
-                self.open_positions = current_positions
-
-                if self.profit_strategy == 'trailing_stop':
-                    for symbol, position in self.open_positions.items():
-                        if symbol not in self.open_positions: self.open_positions[symbol] = {}
-                        self._handle_trailing_stop(position)
-
-                if len(self.open_positions) >= self.max_concurrent_trades:
-                    time.sleep(20); continue
-
-                if self.tradeable_symbols_config.upper() == 'AUTO':
-                    symbols_to_scan = screener.find_potential_coins(self.api_key, self.api_secret, self.is_testnet, self.config['STRATEGY_KadirV2'])
-                else:
-                    symbols_to_scan = [s.strip() for s in self.tradeable_symbols_config.split(',')]
-
-                for symbol in symbols_to_scan:
-                    if not self.strategy_active: break
-                    if symbol in self.open_positions: continue
-
-                    strategy_config = self.config['STRATEGY_KadirV2']
-                    timeframe = strategy_config['timeframe']
-                    df = self._get_market_data(symbol, timeframe)
-                    if df is None or df.empty: continue
-
-                    signal, atr_value = strategy_kadir_v2.get_signal(df, strategy_config)
-                    if signal in ['LONG', 'SHORT']:
-                        self._log(f"🔥 {symbol} için {signal} sinyali bulundu! İşlem açılıyor...")
-                        quantity = self.calculate_quantity(symbol)
-                        if quantity:
-                            self.open_position(symbol, signal, atr_value, quantity)
-                            time.sleep(5)
-                            if len(self.open_positions) >= self.max_concurrent_trades: break
-                
+                # Bir sonraki mumu beklemek için bekleme süresi
+                time.sleep(30) 
+            except RequestException as e:
+                self._log(f"AĞ HATASI: {e}. İnternet bağlantısı bekleniyor...")
                 time.sleep(60)
             except Exception as e:
                 self._log(f"ANA DÖNGÜ HATASI: {type(e).__name__} - {e}")
                 time.sleep(60)
         
         self._log("Otomatik strateji motoru durduruldu.")
-    
-    def start_strategy_loop(self):
-        if not self.strategy_active:
-            self.strategy_active = True
-            threading.Thread(target=self.run_strategy, daemon=True).start()
 
     def stop_strategy_loop(self):
+        self._log("Strateji durduruluyor...")
         self.strategy_active = False
 
-    def stop_all(self):
-        self.running = False
-        self.strategy_active = False
+    # --- Manuel İşlem Fonksiyonları ---
+
+    def set_leverage(self, leverage: int, symbol: str):
+        try:
+            self.client.futures_change_leverage(symbol=symbol, leverage=leverage)
+            self._log(f"✅ {symbol} için kaldıraç {leverage}x olarak ayarlandı.")
+        except BinanceAPIException as e:
+            self._log(f"HATA: Kaldıraç ayarlanamadı: {e.message}")
+            
+    def set_quantity(self, quantity_usd: float):
+        self.quantity_usd = quantity_usd
+        self._log(f"✅ İşlem miktarı {quantity_usd} USD olarak ayarlandı.")
+
+    def manual_trade(self, side: str):
+        if side not in ['LONG', 'SHORT']:
+            self._log("Geçersiz işlem yönü.")
+            return
+        
+        self._log(f"MANUEL İŞLEM: {side} sinyali alındı.")
+        df = self._get_market_data(self.active_symbol, "1m", 20)
+        if df is None: return
+        
+        atr = df['high'].sub(df['low']).rolling(14).mean().iloc[-1]
+        self._open_position('BUY' if side == 'LONG' else 'SELL', atr)
+
+    def close_current_position(self, manual: bool = False):
+        reason = "Manuel kapatma" if manual else "Stratejik kapatma"
+        self._close_position_and_log(reason)
