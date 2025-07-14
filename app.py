@@ -92,7 +92,7 @@ def stop_bot():
 
 @app.route('/get_status')
 def get_status():
-    """Arayüzü beslemek için tüm anlık verileri (loglar, pozisyon durumu vb.) döndürür."""
+    """Arayüzü beslemek için tüm anlık verileri döndürür."""
     if not session.get('logged_in'): return jsonify({"status": "error"}), 401
     
     updates = []
