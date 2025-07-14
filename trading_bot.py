@@ -36,7 +36,6 @@ class TradingBot:
         # Botun durumunu ve ayarlarını tutan değişkenler
         self.running: bool = True
         self.strategy_active: bool = False
-        self.position_open: bool = False
         
         # V3 Ayarları
         self.leverage = self.config['TRADING'].getint('leverage', 10)
