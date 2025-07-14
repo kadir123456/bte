@@ -67,7 +67,7 @@ class TradingBot:
         log_message = f"{time.strftime('%H:%M:%S')} - {message}"
         print(log_message)
         if self.log_callback:
-            self.log_callback("log", log_message)
+            self.log_callback(log_message)
 
     def get_all_usdt_symbols(self) -> List[str]:
         try:
