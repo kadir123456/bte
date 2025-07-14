@@ -5,5 +5,5 @@ requests
 packaging
 Flask
 gunicorn
-setuptools
+setuptools<81
 numpy==1.24.4
