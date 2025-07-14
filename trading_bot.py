@@ -1,4 +1,4 @@
-# trading_bot.py
+# trading_bot.py (Düzeltilmiş Hali)
 
 import os
 import configparser
@@ -131,8 +131,19 @@ class TradingBot:
         """Sinyale göre pozisyon açma/kapatma/tersine çevirme mantığını yönetir."""
         with self.position_lock:
             try:
-                position = self.client.futures_position_information(symbol=self.active_symbol)[0]
+                # --- DÜZELTME BURADA YAPILDI ---
+                pos_info_list = self.client.futures_position_information(symbol=self.active_symbol)
+                if not pos_info_list:
+                    self._log(f"UYARI: {self.active_symbol} için pozisyon bilgisi alınamadı. Bu bir sonraki döngüde düzelebilir.")
+                    return # Fonksiyondan çık ve bir sonraki döngüde tekrar dene.
+                
+                position = pos_info_list[0]
                 pos_amount = float(position['positionAmt'])
+                # --- DÜZELTME SONU ---
+
+            except BinanceAPIException as e:
+                self._log(f"API HATASI: Pozisyon bilgisi alınamadı: {e.message}")
+                return
             except Exception as e:
                 self._log(f"HATA: Pozisyon bilgisi alınamadı: {e}")
                 return
@@ -170,7 +181,10 @@ class TradingBot:
     def _set_tp_sl(self, side: str, atr: float):
         """Verilen bilgilere göre TP ve SL emirlerini oluşturur."""
         try:
-            position = self.client.futures_position_information(symbol=self.active_symbol)[0]
+            position_list = self.client.futures_position_information(symbol=self.active_symbol)
+            if not position_list: return
+            position = position_list[0]
+
             entry_price = float(position['entryPrice'])
             
             rm_mode = self.config['TRADING']['risk_management_mode']
@@ -187,7 +201,6 @@ class TradingBot:
                 else: # fixed_roi
                     roi_tp = float(self.config['TRADING']['fixed_roi_tp'])
                     tp_price = entry_price * (1 + roi_tp / 100)
-                    # Sabit ROI modunda SL manuel olarak ayarlanabilir veya ihmal edilebilir. Bu örnekte ihmal ediyoruz.
                     sl_price = None
 
             else: # SELL
@@ -204,7 +217,6 @@ class TradingBot:
                     tp_price = entry_price * (1 - roi_tp / 100)
                     sl_price = None
 
-            # TP/SL Emirlerini Gönder
             batch_orders = []
             if tp_price:
                 batch_orders.append({
@@ -230,11 +242,12 @@ class TradingBot:
         """Pozisyonu piyasa emriyle kapatır ve veritabanına kaydeder."""
         with self.position_lock:
             try:
-                # 1. Açık tüm TP/SL emirlerini iptal et
                 self.client.futures_cancel_all_open_orders(symbol=self.active_symbol)
 
-                # 2. Pozisyon bilgisini al
-                position = self.client.futures_position_information(symbol=self.active_symbol)[0]
+                position_list = self.client.futures_position_information(symbol=self.active_symbol)
+                if not position_list: return
+                position = position_list[0]
+
                 pos_amount = float(position['positionAmt'])
                 
                 if pos_amount == 0: return
@@ -242,16 +255,13 @@ class TradingBot:
                 side = 'SELL' if pos_amount > 0 else 'BUY'
                 quantity = abs(pos_amount)
                 
-                # 3. Pozisyonu kapatma emrini gönder
                 self.client.futures_create_order(
                     symbol=self.active_symbol, side=side, type=ORDER_TYPE_MARKET, quantity=quantity
                 )
                 self._log(f"POZİSYON KAPATILDI ({reason}).")
 
-                # 4. Kâr/Zarar bilgisini alıp veritabanına ekle
-                time.sleep(2) # Trade geçmişinin güncellenmesi için bekle
+                time.sleep(2) 
                 trades = self.client.futures_account_trades(symbol=self.active_symbol, limit=5)
-                # En son 'realizedPnl' > 0 olan trade'i bul
                 last_trade = next((t for t in reversed(trades) if float(t['realizedPnl']) != 0), None)
                 if last_trade:
                     database.add_trade(last_trade)
@@ -284,7 +294,6 @@ class TradingBot:
 
                 self._manage_position(signal, atr_value)
                 
-                # Bir sonraki mumu beklemek için bekleme süresi
                 time.sleep(30) 
             except RequestException as e:
                 self._log(f"AĞ HATASI: {e}. İnternet bağlantısı bekleniyor...")
@@ -321,8 +330,9 @@ class TradingBot:
         df = self._get_market_data(self.active_symbol, "1m", 20)
         if df is None: return
         
-        atr = df['high'].sub(df['low']).rolling(14).mean().iloc[-1]
-        self._open_position('BUY' if side == 'LONG' else 'SELL', atr)
+        # Basit bir ATR hesaplaması yapalım
+        latest_atr = ta.atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
+        self._open_position('BUY' if side == 'LONG' else 'SELL', latest_atr)
 
     def close_current_position(self, manual: bool = False):
         reason = "Manuel kapatma" if manual else "Stratejik kapatma"
