@@ -1,3 +1,22 @@
-environment:
-  python:
-    version: 3.10
+# render.yaml
+
+services:
+  - type: web
+    name: trading-bot-flask
+    env: python
+    plan: free # Veya ihtiyacınıza göre başka bir plan
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
+    envVars:
+      - key: FLASK_SECRET_KEY
+        generateValue: true # Render sizin için rastgele bir anahtar oluşturur
+      - key: ADMIN_USERNAME
+        value: admin # Burayı Render arayüzünden değiştirin
+      - key: ADMIN_PASSWORD
+        sync: false # Render'a bu değeri manuel gireceğinizi belirtir
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.10.6 # Kullandığınız Python sürümü
