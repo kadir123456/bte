@@ -1,8 +1,9 @@
 python-binance
 pandas
-pandas-ta
+pandas-ta==0.3.14b
 requests
 packaging
 Flask
 gunicorn
 setuptools
+numpy==1.24.4
