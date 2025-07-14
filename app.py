@@ -4,6 +4,7 @@ import os
 import threading
 import time
 from queue import Queue
+from typing import Optional # <--- HATA BURADAYDI, BU SATIR EKLENDİ
 
 from flask import (Flask, flash, jsonify, redirect, render_template, request,
                    session, url_for)
