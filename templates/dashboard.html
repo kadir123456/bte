@@ -4,101 +4,107 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kontrol Paneli - Trading Bot</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
-        body { background-color: #f0f2f5; }
+        body { background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .card { border: none; }
         .status-badge { font-size: 1rem; vertical-align: middle; }
-        #logs { height: 400px; background-color: #1e1e1e; color: #d4d4d4; font-family: monospace; font-size: 0.85rem; overflow-y: scroll; }
-        .card-body-small-padding { padding: 1rem; }
-        .table-sm td, .table-sm th { padding: .4rem; }
+        #logs {
+            height: 400px;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 0.85rem;
+            overflow-y: scroll;
+            border-radius: 0.375rem;
+        }
+        .card-body-small-padding { padding: 1.25rem; }
+        .table-sm td, .table-sm th { padding: .5rem; vertical-align: middle; }
+        .pnl-positive { color: #198754; font-weight: 500; }
+        .pnl-negative { color: #dc3545; font-weight: 500; }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
         <div class="container-fluid">
-            <a class="navbar-brand" href="#">Trading Bot Kontrol Paneli</a>
-            <div class="d-flex">
-                <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">Çıkış Yap</a>
-            </div>
+            <a class="navbar-brand" href="#"><i class="bi bi-robot"></i> Trading Bot Kontrol Paneli</a>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-danger"><i class="bi bi-box-arrow-right"></i> Çıkış Yap</a>
         </div>
     </nav>
 
     <div class="container mt-4">
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card shadow-sm mb-4">
-                    <div class="card-body d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 class="mb-0">
-                                Bot Durumu: <span id="bot-status-badge"></span>
-                                | Aktif Sembol: <strong id="active-symbol-text">N/A</strong>
-                            </h5>
-                        </div>
-                        <div>
-                            <button id="start-bot-btn" class="btn btn-success">Stratejiyi Başlat</button>
-                            <button id="stop-bot-btn" class="btn btn-warning">Stratejiyi Durdur</button>
-                        </div>
-                    </div>
+        <div class="card shadow-sm mb-4">
+            <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <h5 class="mb-0">
+                    <span id="bot-status-badge"></span>
+                    | Aktif Sembol: <strong id="active-symbol-text">Yükleniyor...</strong>
+                </h5>
+                <div class="d-flex gap-2">
+                    <button id="start-bot-btn" class="btn btn-success"><i class="bi bi-play-fill"></i> Stratejiyi Başlat</button>
+                    <button id="stop-bot-btn" class="btn btn-warning"><i class="bi bi-stop-fill"></i> Stratejiyi Durdur</button>
                 </div>
             </div>
         </div>
 
         <div class="row">
-            <div class="col-md-5">
+            <div class="col-lg-5">
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header"><h4>Mevcut Pozisyon</h4></div>
+                    <div class="card-header bg-white"><h5><i class="bi bi-bar-chart-line"></i> Mevcut Pozisyon</h5></div>
                     <div class="card-body card-body-small-padding" id="position-info">
-                        <p class="text-muted">Şu anda açık bir pozisyon bulunmuyor.</p>
+                        <p class="text-muted text-center py-5">Açık pozisyon bulunmuyor.</p>
                     </div>
                 </div>
 
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header"><h4>Genel İstatistikler</h4></div>
+                    <div class="card-header bg-white"><h5><i class="bi bi-clipboard-data"></i> Genel İstatistikler</h5></div>
                     <div class="card-body card-body-small-padding" id="stats-info">
-                        Yükleniyor...
+                        <p class="text-muted text-center py-3">Veriler yükleniyor...</p>
                     </div>
                 </div>
+
                  <div class="card shadow-sm mb-4">
-                    <div class="card-header"><h4>Manuel İşlemler</h4></div>
-                    <div class="card-body d-flex justify-content-around">
-                        <button class="btn btn-success" onclick="manualTrade('LONG')">MANUEL LONG</button>
-                        <button class="btn btn-danger" onclick="manualTrade('SHORT')">MANUEL SHORT</button>
-                        <button class="btn btn-secondary" onclick="closePosition()">POZİSYONU KAPAT</button>
+                    <div class="card-header bg-white"><h5><i class="bi bi-hand-index-thumb"></i> Manuel İşlemler</h5></div>
+                    <div class="card-body d-flex justify-content-around p-3">
+                        <button class="btn btn-outline-success" onclick="manualTrade('LONG')">MANUEL LONG</button>
+                        <button class="btn btn-outline-danger" onclick="manualTrade('SHORT')">MANUEL SHORT</button>
+                        <button class="btn btn-outline-secondary" onclick="closePosition()">POZİSYONU KAPAT</button>
                     </div>
                 </div>
             </div>
-            <div class="col-md-7">
+
+            <div class="col-lg-7">
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header"><h4>Bot Logları</h4></div>
+                    <div class="card-header bg-white"><h5><i class="bi bi-terminal"></i> Bot Logları</h5></div>
                     <div class="card-body card-body-small-padding">
-                        <div id="logs" class="p-2 rounded"></div>
+                        <div id="logs" class="p-2"></div>
                     </div>
                 </div>
             </div>
         </div>
         
         <div class="row">
-             <div class="col-md-12">
+             <div class="col-12">
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header"><h4>Ayarlar</h4></div>
+                    <div class="card-header bg-white"><h5><i class="bi bi-gear"></i> Ayarlar</h5></div>
                     <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-4">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-5">
                                 <label for="symbol-select" class="form-label">İşlem Yapılacak Sembol</label>
                                 <div class="input-group">
-                                    <select class="form-select" id="symbol-select"></select>
-                                    <button class="btn btn-outline-primary" onclick="updateSymbol()">Güncelle</button>
+                                    <select class="form-select" id="symbol-select" aria-label="Sembol Seçimi"></select>
+                                    <button class="btn btn-primary" onclick="updateSymbol()">Uygula</button>
                                 </div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="leverage-input" class="form-label">Kaldıraç</label>
-                                <input type="number" id="leverage-input" class="form-control" value="10">
+                                <input type="number" id="leverage-input" class="form-control" value="10" min="1" max="125">
                             </div>
                             <div class="col-md-4">
                                 <label for="quantity-input" class="form-label">Miktar (USD)</label>
                                 <div class="input-group">
-                                    <input type="number" id="quantity-input" class="form-control" value="100">
-                                    <button class="btn btn-outline-primary" onclick="updateSettings()">Kaydet</button>
+                                    <input type="number" id="quantity-input" class="form-control" value="100" min="1">
+                                    <button class="btn btn-primary" onclick="updateSettings()">Ayarları Kaydet</button>
                                 </div>
                             </div>
                         </div>
@@ -106,19 +112,22 @@
                 </div>
             </div>
 
-            <div class="col-md-12">
+            <div class="col-12">
                  <div class="card shadow-sm mb-4">
-                    <div class="card-header"><h4>İşlem Geçmişi</h4></div>
+                    <div class="card-header bg-white"><h5><i class="bi bi-clock-history"></i> İşlem Geçmişi</h5></div>
                     <div class="card-body">
-                         <table class="table table-striped table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Tarih</th><th>Sembol</th><th>Yön</th><th>PNL (USDT)</th><th>İşlem ID</th>
-                                </tr>
-                            </thead>
-                            <tbody id="trades-history-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Tarih</th><th>Sembol</th><th>Yön</th><th>PNL (USDT)</th><th>İşlem ID</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="trades-history-body">
+                                    <tr><td colspan="5" class="text-center text-muted">Geçmiş işlem bulunmuyor.</td></tr>
                                 </tbody>
-                         </table>
+                            </table>
+                        </div>
                     </div>
                  </div>
             </div>
@@ -126,177 +135,197 @@
     </div>
 
 <script>
-    // --- ELEMENT REFERANSLARI ---
-    const logContainer = document.getElementById('logs');
-    const statusBadge = document.getElementById('bot-status-badge');
-    const activeSymbolText = document.getElementById('active-symbol-text');
-    const startBtn = document.getElementById('start-bot-btn');
-    const stopBtn = document.getElementById('stop-bot-btn');
-    const positionInfo = document.getElementById('position-info');
-    const statsInfo = document.getElementById('stats-info');
-    const symbolSelect = document.getElementById('symbol-select');
-    const tradesHistoryBody = document.getElementById('trades-history-body');
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- ELEMENT REFERANSLARI ---
+        const logContainer = document.getElementById('logs');
+        const statusBadge = document.getElementById('bot-status-badge');
+        const activeSymbolText = document.getElementById('active-symbol-text');
+        const startBtn = document.getElementById('start-bot-btn');
+        const stopBtn = document.getElementById('stop-bot-btn');
+        const positionInfo = document.getElementById('position-info');
+        const statsInfo = document.getElementById('stats-info');
+        const symbolSelect = document.getElementById('symbol-select');
+        const tradesHistoryBody = document.getElementById('trades-history-body');
 
-    // --- API İSTEKLERİ ---
-    async function postData(url, data = {}) {
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            });
-            return await response.json();
-        } catch (error) {
-            console.error('API isteği başarısız:', error);
-        }
-    }
-
-    // --- KONTROL FONKSİYONLARI ---
-    startBtn.addEventListener('click', () => postData('/start_bot'));
-    stopBtn.addEventListener('click', () => postData('/stop_bot'));
-    
-    function manualTrade(side) {
-        if (confirm(`${side} yönünde manuel işlem açmak istediğinize emin misiniz?`)) {
-            postData('/manual_trade', { side: side });
-        }
-    }
-
-    function closePosition() {
-        if (confirm('Mevcut pozisyonu kapatmak istediğinize emin misiniz?')) {
-            postData('/close_position');
-        }
-    }
-
-    function updateSymbol() {
-        const selectedSymbol = symbolSelect.value;
-        postData('/update_symbol', { symbol: selectedSymbol });
-    }
-
-    function updateSettings() {
-        const leverage = document.getElementById('leverage-input').value;
-        const quantity_usd = document.getElementById('quantity-input').value;
-        postData('/update_settings', { leverage: leverage, quantity_usd: quantity_usd });
-    }
-
-    // --- ARAYÜZ GÜNCELLEME FONKSİYONLARI ---
-    function updateLogs(logs) {
-        if (logs.length > 0) {
-            logs.forEach(log => {
-                const p = document.createElement('p');
-                p.textContent = log;
-                p.className = 'mb-0';
-                logContainer.appendChild(p);
-            });
-            logContainer.scrollTop = logContainer.scrollHeight; // Otomatik aşağı kaydır
-        }
-    }
-
-    function updateStatus(data) {
-        // Bot durumu
-        if (data.bot_status) {
-            statusBadge.innerHTML = '<span class="badge bg-success status-badge">Çalışıyor</span>';
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-        } else {
-            statusBadge.innerHTML = '<span class="badge bg-danger status-badge">Durdu</span>';
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-        }
-        activeSymbolText.textContent = data.active_symbol;
-
-        // Pozisyon bilgisi
-        if (data.position) {
-            const pos = data.position;
-            const pnlClass = parseFloat(pos.pnl_usdt) >= 0 ? 'text-success' : 'text-danger';
-            const side = parseFloat(pos.quantity) > 0 ? 'LONG' : 'SHORT';
-            const sideClass = side === 'LONG' ? 'text-success' : 'text-danger';
-
-            positionInfo.innerHTML = `
-                <table class="table table-sm">
-                    <tr><th>Sembol</th><td><strong>${pos.symbol} (${pos.leverage}x)</strong></td></tr>
-                    <tr><th>Yön</th><td><strong class="${sideClass}">${side}</strong></td></tr>
-                    <tr><th>Miktar</th><td>${pos.quantity}</td></tr>
-                    <tr><th>Giriş Fiyatı</th><td>${pos.entry_price}</td></tr>
-                    <tr><th>Anlık Fiyat</th><td>${pos.mark_price}</td></tr>
-                    <tr><th>TP/SL</th><td>${pos.tp_price} / ${pos.sl_price}</td></tr>
-                    <tr><th>PnL / ROI</th><td><strong class="${pnlClass}">${pos.pnl_usdt} USDT / ${pos.roi_percent}%</strong></td></tr>
-                </table>
-            `;
-        } else {
-            positionInfo.innerHTML = '<p class="text-muted">Şu anda açık bir pozisyon bulunmuyor.</p>';
+        // --- API İSTEKLERİ ---
+        async function postData(url, data = {}) {
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                return await response.json();
+            } catch (error) {
+                console.error(`API isteği başarısız: ${url}`, error);
+                alert("Sunucu ile iletişim kurulamadı. Lütfen internet bağlantınızı kontrol edin.");
+            }
         }
 
-        // İstatistikler
-        if(data.stats) {
-            const stats = data.stats;
-            const winRateClass = stats.win_rate >= 50 ? 'text-success' : 'text-danger';
-            statsInfo.innerHTML = `
-                <table class="table table-sm">
-                    <tr><th>Toplam PNL</th><td><strong>${stats.total_pnl.toFixed(2)} USDT</strong></td></tr>
-                    <tr><th>Kazanma Oranı</th><td><strong class="${winRateClass}">${stats.win_rate.toFixed(2)}%</strong></td></tr>
-                    <tr><th>Kazanan / Kaybeden</th><td><span class="text-success">${stats.wins}</span> / <span class="text-danger">${stats.losses}</span></td></tr>
-                    <tr><th>Toplam İşlem</th><td>${stats.total_trades}</td></tr>
-                </table>
-            `;
+        // --- KONTROL FONKSİYONLARI ---
+        startBtn.addEventListener('click', () => postData('/start_bot'));
+        stopBtn.addEventListener('click', () => postData('/stop_bot'));
+        
+        window.manualTrade = function(side) {
+            if (confirm(`${side} yönünde manuel işlem açmak istediğinize emin misiniz?`)) {
+                postData('/manual_trade', { side: side });
+            }
+        }
+
+        window.closePosition = function() {
+            if (confirm('Mevcut pozisyonu kapatmak istediğinize emin misiniz?')) {
+                postData('/close_position');
+            }
+        }
+
+        window.updateSymbol = function() {
+            const selectedSymbol = symbolSelect.value;
+            if (selectedSymbol) {
+                postData('/update_symbol', { symbol: selectedSymbol });
+            } else {
+                alert("Lütfen listeden bir sembol seçin.");
+            }
+        }
+
+        window.updateSettings = function() {
+            const leverage = document.getElementById('leverage-input').value;
+            const quantity_usd = document.getElementById('quantity-input').value;
+            postData('/update_settings', { leverage: leverage, quantity_usd: quantity_usd });
+        }
+
+        // --- ARAYÜZ GÜNCELLEME FONKSİYONLARI ---
+        function updateLogs(logs) {
+            if (logs.length > 0) {
+                logs.forEach(log => {
+                    const p = document.createElement('p');
+                    p.textContent = log;
+                    p.className = 'mb-0';
+                    logContainer.appendChild(p);
+                });
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+
+        function updateStatusUI(data) {
+            // Bot durumu
+            if (data.bot_status) {
+                statusBadge.innerHTML = '<span class="badge bg-success status-badge"><i class="bi bi-check-circle-fill"></i> Çalışıyor</span>';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                statusBadge.innerHTML = '<span class="badge bg-danger status-badge"><i class="bi bi-x-circle-fill"></i> Durdu</span>';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+            activeSymbolText.textContent = data.active_symbol || 'N/A';
+
+            // Pozisyon bilgisi
+            if (data.position) {
+                const pos = data.position;
+                const pnl = parseFloat(pos.pnl_usdt);
+                const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                const pnlIcon = pnl >= 0 ? '<i class="bi bi-arrow-up-right"></i>' : '<i class="bi bi-arrow-down-left"></i>';
+                const side = parseFloat(pos.quantity) > 0 ? 'LONG' : 'SHORT';
+                const sideClass = side === 'LONG' ? 'text-success' : 'text-danger';
+
+                positionInfo.innerHTML = `
+                    <table class="table table-sm table-borderless">
+                        <tr><th>Sembol</th><td><strong>${pos.symbol} (${pos.leverage}x)</strong></td></tr>
+                        <tr><th>Yön</th><td><strong class="${sideClass}">${side}</strong></td></tr>
+                        <tr><th>Miktar</th><td>${pos.quantity}</td></tr>
+                        <tr><th>Giriş Fiyatı</th><td>${pos.entry_price}</td></tr>
+                        <tr><th>Anlık Fiyat</th><td>${pos.mark_price}</td></tr>
+                        <tr><th>TP / SL</th><td>${pos.tp_price} / ${pos.sl_price}</td></tr>
+                        <tr><th>PnL / ROI</th><td class="${pnlClass}">${pnlIcon} ${pos.pnl_usdt} USDT / ${pos.roi_percent}%</td></tr>
+                    </table>
+                `;
+            } else {
+                positionInfo.innerHTML = '<p class="text-muted text-center py-5">Açık pozisyon bulunmuyor.</p>';
+            }
+
+            // İstatistikler
+            if (data.stats) {
+                const stats = data.stats;
+                const winRateClass = stats.win_rate >= 50 ? 'text-success' : 'text-danger';
+                statsInfo.innerHTML = `
+                    <table class="table table-sm table-borderless">
+                        <tr><th>Toplam PNL</th><td class="${stats.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${stats.total_pnl.toFixed(2)} USDT</td></tr>
+                        <tr><th>Kazanma Oranı</th><td class="${winRateClass}">${stats.win_rate.toFixed(2)}%</td></tr>
+                        <tr><th>Kazanan / Kaybeden</th><td><span class="text-success">${stats.wins}</span> / <span class="text-danger">${stats.losses}</span></td></tr>
+                        <tr><th>Toplam İşlem</th><td>${stats.total_trades}</td></tr>
+                    </table>
+                `;
+            }
+            
+            // İşlem Geçmişi
+            if (data.all_trades && data.all_trades.length > 0) {
+                tradesHistoryBody.innerHTML = '';
+                data.all_trades.forEach(trade => {
+                    const pnlClass = trade[4] >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    const date = new Date(trade[5]).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
+                    const row = `
+                        <tr>
+                            <td>${date}</td>
+                            <td>${trade[1]}</td>
+                            <td>${trade[3]}</td>
+                            <td class="${pnlClass}">${trade[4].toFixed(2)}</td>
+                            <td>${trade[2]}</td>
+                        </tr>
+                    `;
+                    tradesHistoryBody.innerHTML += row;
+                });
+            } else {
+                 tradesHistoryBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Geçmiş işlem bulunmuyor.</td></tr>';
+            }
         }
         
-        // İşlem Geçmişi
-        if(data.all_trades && data.all_trades.length > 0) {
-            tradesHistoryBody.innerHTML = ''; // Temizle
-            data.all_trades.forEach(trade => {
-                const pnlClass = trade[4] > 0 ? 'text-success' : 'text-danger';
-                const date = new Date(trade[5]).toLocaleString('tr-TR');
-                const row = `
-                    <tr>
-                        <td>${date}</td>
-                        <td>${trade[1]}</td>
-                        <td>${trade[3]}</td>
-                        <td class="${pnlClass}">${trade[4].toFixed(2)}</td>
-                        <td>${trade[2]}</td>
-                    </tr>
-                `;
-                tradesHistoryBody.innerHTML += row;
-            });
-        }
-    }
-    
-    // --- VERİ ÇEKME DÖNGÜSÜ ---
-    async function fetchStatus() {
-        try {
-            const response = await fetch('/get_status');
-            const data = await response.json();
-            updateLogs(data.logs);
-            updateStatus(data);
-        } catch (error) {
-            console.error('Durum güncellenemedi:', error);
-        }
-    }
-
-    async function fetchAllSymbols() {
-        try {
-            const response = await fetch('/get_all_symbols');
-            const data = await response.json();
-            if(data.symbols) {
-                symbolSelect.innerHTML = '';
-                data.symbols.forEach(symbol => {
-                    const option = document.createElement('option');
-                    option.value = symbol;
-                    option.textContent = symbol;
-                    symbolSelect.appendChild(option);
-                });
-                // Aktif sembolü seçili getir
-                symbolSelect.value = activeSymbolText.textContent;
+        // --- VERİ ÇEKME DÖNGÜSÜ ---
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/get_status');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                updateLogs(data.logs);
+                updateStatusUI(data);
+            } catch (error) {
+                console.error('Durum güncellenemedi:', error);
             }
-        } catch (error) {
-            console.error('Semboller çekilemedi:', error);
         }
-    }
 
-    // Sayfa yüklendiğinde ve sonrasında periyodik olarak veri çek
-    document.addEventListener('DOMContentLoaded', () => {
-        fetchStatus();
-        fetchAllSymbols();
-        setInterval(fetchStatus, 3000); // Her 3 saniyede bir durumu güncelle
+        async function fetchAllSymbols() {
+            try {
+                const response = await fetch('/get_all_symbols');
+                const data = await response.json();
+                if (data.symbols && data.symbols.length > 0) {
+                    const currentSymbol = activeSymbolText.textContent;
+                    symbolSelect.innerHTML = '';
+                    data.symbols.forEach(symbol => {
+                        const option = document.createElement('option');
+                        option.value = symbol;
+                        option.textContent = symbol;
+                        if (symbol === currentSymbol) {
+                            option.selected = true;
+                        }
+                        symbolSelect.appendChild(option);
+                    });
+                } else {
+                    symbolSelect.innerHTML = '<option>Semboller yüklenemedi</option>';
+                }
+            } catch (error) {
+                console.error('Semboller çekilemedi:', error);
+            }
+        }
+
+        // Sayfa yüklendiğinde ve sonrasında periyodik olarak veri çek
+        (async () => {
+            await fetchStatus(); // İlk durum ve sembol adını yükle
+            await fetchAllSymbols(); // Sembolleri doldur
+            
+            // IP banını önlemek için güncelleme sıklığını 15 saniyeye yavaşlatıyoruz.
+            setInterval(fetchStatus, 15000); 
+        })();
     });
 </script>
 
