@@ -2,311 +2,303 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>KadirV3 Pro - Ticaret Terminali</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kontrol Paneli - Trading Bot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        :root {
-            --bg-color: #1a1b26;
-            --surface-color: #24283b;
-            --primary-color: #7aa2f7;
-            --text-color: #c0caf5;
-            --text-secondary: #a9b1d6;
-            --success-color: #9ece6a;
-            --danger-color: #f7768e;
-            --warning-color: #e0af68;
-            --border-color: #414868;
-        }
-        * { box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            font-size: 16px;
-        }
-        .container { display: flex; flex-direction: column; min-height: 100vh; }
-        header {
-            background-color: var(--surface-color);
-            padding: 1rem 1.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            flex-shrink: 0;
-        }
-        header h1 { margin: 0; font-size: 1.5rem; color: var(--primary-color); }
-        header a { color: var(--text-secondary); text-decoration: none; font-weight: 500; }
-        .main-content { display: flex; flex-wrap: wrap; flex-grow: 1; padding: 1rem; gap: 1rem; }
-        .left-panel, .right-panel { display: flex; flex-direction: column; gap: 1rem; }
-        .left-panel { flex: 1; min-width: 320px; }
-        .right-panel { flex: 2; min-width: 400px; }
-        .card { background-color: var(--surface-color); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); }
-        .card-title { margin-top: 0; margin-bottom: 1.5rem; font-size: 1.2rem; font-weight: bold; color: var(--text-color); border-bottom: 1px solid var(--border-color); padding-bottom: 0.8rem; }
-        button { width: 100%; padding: 0.8rem 1.2rem; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: all 0.2s; margin-top: 0.5rem; }
-        button:active { transform: scale(0.98); }
-        .btn-start { background-color: var(--success-color); color: #1a1b26; }
-        .btn-stop { background-color: var(--warning-color); color: #1a1b26; }
-        .btn-danger { background-color: var(--danger-color); color: white; }
-        .btn-primary { background-color: var(--primary-color); color: #1a1b26; }
-        .input-group { display: flex; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; }
-        .input-group label { flex-basis: 140px; color: var(--text-secondary); }
-        .input-group input, .input-group select, .input-group textarea {
-            flex-grow: 1;
-            padding: 8px 12px;
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-color);
-            min-width: 100px;
-            font-family: inherit;
-        }
-        .position-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.8rem 1rem; align-items: center;}
-        .position-grid .label { font-weight: bold; color: var(--text-secondary); }
-        .position-grid .value { font-family: 'SF Mono', monospace; word-break: break-all; }
-        #log-container { background-color: #16161e; border-radius: 8px; padding: 1rem; height: 50vh; overflow-y: auto; font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; line-height: 1.6; }
-        .status-indicator { display: flex; align-items: center; gap: 0.5rem; background-color: var(--bg-color); padding: 0.5rem 1rem; border-radius: 20px; }
-        .status-dot { width: 12px; height: 12px; border-radius: 50%; transition: background-color 0.5s; }
-        .tabs { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem; }
-        .tab-button { background: none; border: none; color: var(--text-secondary); padding: 1rem; cursor: pointer; font-size: 1rem; border-bottom: 3px solid transparent; }
-        .tab-button.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        #history-table { width: 100%; border-collapse: collapse; }
-        #history-table th, #history-table td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
-        #history-table th { color: var(--primary-color); }
+        body { background-color: #f0f2f5; }
+        .status-badge { font-size: 1rem; vertical-align: middle; }
+        #logs { height: 400px; background-color: #1e1e1e; color: #d4d4d4; font-family: monospace; font-size: 0.85rem; overflow-y: scroll; }
+        .card-body-small-padding { padding: 1rem; }
+        .table-sm td, .table-sm th { padding: .4rem; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>KadirV3 Terminal</h1>
-            <a href="/logout">Çıkış Yap</a>
-        </header>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Trading Bot Kontrol Paneli</a>
+            <div class="d-flex">
+                <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">Çıkış Yap</a>
+            </div>
+        </div>
+    </nav>
 
-        <main class="main-content">
-            <div class="left-panel">
-                <div class="card">
-                    <h3 class="card-title">Ana Kontroller</h3>
-                    <div class="status-indicator" style="margin-bottom: 1rem; justify-content: center;">
-                        <div id="status-dot" style="background-color: var(--danger-color);"></div>
-                        <b id="status-text">DURUYOR</b>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0">
+                                Bot Durumu: <span id="bot-status-badge"></span>
+                                | Aktif Sembol: <strong id="active-symbol-text">N/A</strong>
+                            </h5>
+                        </div>
+                        <div>
+                            <button id="start-bot-btn" class="btn btn-success">Stratejiyi Başlat</button>
+                            <button id="stop-bot-btn" class="btn btn-warning">Stratejiyi Durdur</button>
+                        </div>
                     </div>
-                    <button class="btn-start" onclick="sendCommand('/start_bot')">Otomatik Taramayı Başlat</button>
-                    <button class="btn-stop" onclick="sendCommand('/stop_bot')">Otomatik Taramayı Durdur</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-5">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header"><h4>Mevcut Pozisyon</h4></div>
+                    <div class="card-body card-body-small-padding" id="position-info">
+                        <p class="text-muted">Şu anda açık bir pozisyon bulunmuyor.</p>
+                    </div>
                 </div>
 
-                <div class="card">
-                    <h3 class="card-title">Açık Pozisyonlar (<span id="open-positions-count">0</span>)</h3>
-                    <div id="positions-list" style="max-height: 300px; overflow-y: auto;">
-                        <p style="color: var(--text-secondary);">Açık pozisyon yok.</p>
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header"><h4>Genel İstatistikler</h4></div>
+                    <div class="card-body card-body-small-padding" id="stats-info">
+                        Yükleniyor...
                     </div>
-                     <button class="btn-danger" onclick="sendCommand('/close_all_positions')" style="margin-top: 1rem;">Tüm Pozisyonları Kapat</button>
+                </div>
+                 <div class="card shadow-sm mb-4">
+                    <div class="card-header"><h4>Manuel İşlemler</h4></div>
+                    <div class="card-body d-flex justify-content-around">
+                        <button class="btn btn-success" onclick="manualTrade('LONG')">MANUEL LONG</button>
+                        <button class="btn btn-danger" onclick="manualTrade('SHORT')">MANUEL SHORT</button>
+                        <button class="btn btn-secondary" onclick="closePosition()">POZİSYONU KAPAT</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header"><h4>Bot Logları</h4></div>
+                    <div class="card-body card-body-small-padding">
+                        <div id="logs" class="p-2 rounded"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+             <div class="col-md-12">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header"><h4>Ayarlar</h4></div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label for="symbol-select" class="form-label">İşlem Yapılacak Sembol</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="symbol-select"></select>
+                                    <button class="btn btn-outline-primary" onclick="updateSymbol()">Güncelle</button>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="leverage-input" class="form-label">Kaldıraç</label>
+                                <input type="number" id="leverage-input" class="form-control" value="10">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quantity-input" class="form-label">Miktar (USD)</label>
+                                <div class="input-group">
+                                    <input type="number" id="quantity-input" class="form-control" value="100">
+                                    <button class="btn btn-outline-primary" onclick="updateSettings()">Kaydet</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="right-panel">
-                <div class="card">
-                    <div class="tabs">
-                        <button class="tab-button active" onclick="openTab(event, 'dashboard')">Ana Panel</button>
-                        <button class="tab-button" onclick="openTab(event, 'history')">Geçmiş & Performans</button>
-                        <button class="tab-button" onclick="openTab(event, 'settings')">Ayarlar</button>
-                    </div>
-
-                    <div id="dashboard" class="tab-content active">
-                        <h3 class="card-title">Canlı Loglar</h3>
-                        <div id="log-container"></div>
-                    </div>
-
-                    <div id="history" class="tab-content">
-                        <h3 class="card-title">İşlem Geçmişi</h3>
-                        <button class="btn-primary" onclick="fetchHistory()" style="width: auto; float: right; margin-top: -3.5rem;">Yenile</button>
-                        <div style="overflow-x:auto;">
-                            <table id="history-table">
-                                <thead>
-                                    <tr><th>ID</th><th>Sembol</th><th>Yön</th><th>Giriş</th><th>Çıkış</th><th>PNL</th><th>Zaman</th></tr>
-                                </thead>
-                                <tbody id="history-body">
+            <div class="col-md-12">
+                 <div class="card shadow-sm mb-4">
+                    <div class="card-header"><h4>İşlem Geçmişi</h4></div>
+                    <div class="card-body">
+                         <table class="table table-striped table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Tarih</th><th>Sembol</th><th>Yön</th><th>PNL (USDT)</th><th>İşlem ID</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trades-history-body">
                                 </tbody>
-                            </table>
-                        </div>
-                        <h3 class="card-title" style="margin-top: 2rem;">Genel Performans</h3>
-                        <div class="position-grid">
-                            <div class="label">Toplam Kâr/Zarar:</div><div class="value" id="stats-total-pnl">0 USDT</div>
-                            <div class="label">Kazanma Oranı:</div><div class="value" id="stats-winrate">0%</div>
-                            <div class="label">Toplam İşlem:</div><div class="value" id="stats-total-trades">0</div>
-                            <div class="label">Kazanan İşlemler:</div><div class="value" id="stats-wins">0</div>
-                            <div class="label">Kaybeden İşlemler:</div><div class="value" id="stats-losses">0</div>
-                        </div>
+                         </table>
                     </div>
-
-                    <div id="settings" class="tab-content">
-                        <h3 class="card-title">Terminal Ayarları</h3>
-                        <div class="input-group">
-                            <label for="leverage">Kaldıraç:</label>
-                            <input type="number" id="leverage" value="10">
-                        </div>
-                        <div class="input-group">
-                            <label for="quantity">İşlem Başına USD:</label>
-                            <input type="number" id="quantity" value="20">
-                        </div>
-                        <div class="input-group">
-                            <label for="max-trades">Max. Açık İşlem:</label>
-                            <input type="number" id="max-trades" value="3">
-                        </div>
-                        <div class="input-group">
-                            <label for="margin-type">Marjin Tipi:</label>
-                            <select id="margin-type">
-                                <option value="ISOLATED">İzole</option>
-                                <option value="CROSS">Cross</option>
-                            </select>
-                        </div>
-                        <div class="input-group">
-                            <label for="profit-strategy">Kâr Stratejisi:</label>
-                            <select id="profit-strategy">
-                                <option value="trailing_stop">İz Süren Stop</option>
-                                <option value="fixed_roi">Sabit ROI</option>
-                            </select>
-                        </div>
-                        <div class="input-group">
-                            <label for="tp-pct">Hedef Kâr (%):</label>
-                            <input type="number" id="tp-pct" value="2.0" step="0.1">
-                        </div>
-                         <div class="input-group">
-                            <label for="sl-pct">Zarar Kes (%):</label>
-                            <input type="number" id="sl-pct" value="1.0" step="0.1">
-                        </div>
-                        <div class="input-group">
-                            <label for="tradeable-symbols">İşlem Listesi:</label>
-                            <textarea id="tradeable-symbols" rows="3" placeholder="XRPUSDT,DOGEUSDT,LTCUSDT veya AUTO yazın"></textarea>
-                        </div>
-                        <button class="btn-primary" onclick="updateSettings()">Ayarları Kaydet</button>
-                    </div>
-                </div>
+                 </div>
             </div>
-        </main>
+        </div>
     </div>
 
-    <script>
-        // --- Tab Yönetimi ---
-        function openTab(evt, tabName) {
-            let i, tabcontent, tablinks;
-            tabcontent = document.getElementsByClassName("tab-content");
-            for (i = 0; i < tabcontent.length; i++) { tabcontent[i].style.display = "none"; }
-            tablinks = document.getElementsByClassName("tab-button");
-            for (i = 0; i < tablinks.length; i++) { tablinks[i].className = tablinks[i].className.replace(" active", ""); }
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
+<script>
+    // --- ELEMENT REFERANSLARI ---
+    const logContainer = document.getElementById('logs');
+    const statusBadge = document.getElementById('bot-status-badge');
+    const activeSymbolText = document.getElementById('active-symbol-text');
+    const startBtn = document.getElementById('start-bot-btn');
+    const stopBtn = document.getElementById('stop-bot-btn');
+    const positionInfo = document.getElementById('position-info');
+    const statsInfo = document.getElementById('stats-info');
+    const symbolSelect = document.getElementById('symbol-select');
+    const tradesHistoryBody = document.getElementById('trades-history-body');
+
+    // --- API İSTEKLERİ ---
+    async function postData(url, data = {}) {
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('API isteği başarısız:', error);
+        }
+    }
+
+    // --- KONTROL FONKSİYONLARI ---
+    startBtn.addEventListener('click', () => postData('/start_bot'));
+    stopBtn.addEventListener('click', () => postData('/stop_bot'));
+    
+    function manualTrade(side) {
+        if (confirm(`${side} yönünde manuel işlem açmak istediğinize emin misiniz?`)) {
+            postData('/manual_trade', { side: side });
+        }
+    }
+
+    function closePosition() {
+        if (confirm('Mevcut pozisyonu kapatmak istediğinize emin misiniz?')) {
+            postData('/close_position');
+        }
+    }
+
+    function updateSymbol() {
+        const selectedSymbol = symbolSelect.value;
+        postData('/update_symbol', { symbol: selectedSymbol });
+    }
+
+    function updateSettings() {
+        const leverage = document.getElementById('leverage-input').value;
+        const quantity_usd = document.getElementById('quantity-input').value;
+        postData('/update_settings', { leverage: leverage, quantity_usd: quantity_usd });
+    }
+
+    // --- ARAYÜZ GÜNCELLEME FONKSİYONLARI ---
+    function updateLogs(logs) {
+        if (logs.length > 0) {
+            logs.forEach(log => {
+                const p = document.createElement('p');
+                p.textContent = log;
+                p.className = 'mb-0';
+                logContainer.appendChild(p);
+            });
+            logContainer.scrollTop = logContainer.scrollHeight; // Otomatik aşağı kaydır
+        }
+    }
+
+    function updateStatus(data) {
+        // Bot durumu
+        if (data.bot_status) {
+            statusBadge.innerHTML = '<span class="badge bg-success status-badge">Çalışıyor</span>';
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+        } else {
+            statusBadge.innerHTML = '<span class="badge bg-danger status-badge">Durdu</span>';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+        activeSymbolText.textContent = data.active_symbol;
+
+        // Pozisyon bilgisi
+        if (data.position) {
+            const pos = data.position;
+            const pnlClass = parseFloat(pos.pnl_usdt) >= 0 ? 'text-success' : 'text-danger';
+            const side = parseFloat(pos.quantity) > 0 ? 'LONG' : 'SHORT';
+            const sideClass = side === 'LONG' ? 'text-success' : 'text-danger';
+
+            positionInfo.innerHTML = `
+                <table class="table table-sm">
+                    <tr><th>Sembol</th><td><strong>${pos.symbol} (${pos.leverage}x)</strong></td></tr>
+                    <tr><th>Yön</th><td><strong class="${sideClass}">${side}</strong></td></tr>
+                    <tr><th>Miktar</th><td>${pos.quantity}</td></tr>
+                    <tr><th>Giriş Fiyatı</th><td>${pos.entry_price}</td></tr>
+                    <tr><th>Anlık Fiyat</th><td>${pos.mark_price}</td></tr>
+                    <tr><th>TP/SL</th><td>${pos.tp_price} / ${pos.sl_price}</td></tr>
+                    <tr><th>PnL / ROI</th><td><strong class="${pnlClass}">${pos.pnl_usdt} USDT / ${pos.roi_percent}%</strong></td></tr>
+                </table>
+            `;
+        } else {
+            positionInfo.innerHTML = '<p class="text-muted">Şu anda açık bir pozisyon bulunmuyor.</p>';
         }
 
-        // --- API İletişimi ---
-        async function sendCommand(url, data = {}) {
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    alert(`Hata: ${errorData.message || 'Bilinmeyen bir hata oluştu.'}`);
-                }
-            } catch (error) { console.error('Komut gönderilemedi:', error); }
-        }
-
-        function updateSettings() {
-            const settings = {
-                leverage: document.getElementById('leverage').value,
-                quantity_per_trade_usd: document.getElementById('quantity').value,
-                max_concurrent_trades: document.getElementById('max-trades').value,
-                margin_type: document.getElementById('margin-type').value,
-                profit_strategy: document.getElementById('profit-strategy').value,
-                fixed_take_profit_pct: document.getElementById('tp-pct').value,
-                fixed_stop_loss_pct: document.getElementById('sl-pct').value,
-                tradeable_symbols: document.getElementById('tradeable-symbols').value,
-            };
-            sendCommand('/update_settings', settings);
-        }
-
-        // --- Veri Güncelleme ---
-        function fetchStatus() {
-            fetch('/get_status')
-                .then(response => response.ok ? response.json() : Promise.reject('Network response was not ok.'))
-                .then(data => {
-                    // Logları güncelle
-                    const logContainer = document.getElementById('log-container');
-                    if (data.updates) {
-                        data.updates.forEach(update => {
-                            if (update.type === "log") {
-                                const logLine = document.createElement('div');
-                                logLine.textContent = update.data;
-                                logContainer.appendChild(logLine);
-                            } else if (update.type === "history_update") {
-                                fetchHistory();
-                            }
-                        });
-                        if (data.updates.length > 0) logContainer.scrollTop = logContainer.scrollHeight;
-                    }
-                    
-                    // Bot durumunu güncelle
-                    const statusText = document.getElementById('status-text');
-                    const statusDot = document.getElementById('status-dot');
-                    const isActive = data.bot_status;
-                    statusText.textContent = isActive ? 'ÇALIŞIYOR' : 'DURUYOR';
-                    statusDot.style.backgroundColor = isActive ? 'var(--success-color)' : 'var(--danger-color)';
-                    
-                    // Açık pozisyonları güncelle
-                    const posList = document.getElementById('positions-list');
-                    const posCount = document.getElementById('open-positions-count');
-                    posList.innerHTML = '';
-                    if (data.open_positions && data.open_positions.length > 0) {
-                        posCount.textContent = data.open_positions.length;
-                        data.open_positions.forEach(pos => {
-                            const pnlValue = parseFloat(pos.pnl_usdt);
-                            const pnlColor = pnlValue >= 0 ? 'var(--success-color)' : 'var(--danger-color)';
-                            const posDiv = document.createElement('div');
-                            posDiv.innerHTML = `<div class="position-grid"><div class="label">${pos.symbol}</div><div class="value" style="color:${pnlColor}">${pos.pnl_usdt} USDT (${pos.roi_percent}%)</div></div>`;
-                            posList.appendChild(posDiv);
-                        });
-                    } else {
-                        posCount.textContent = 0;
-                        posList.innerHTML = '<p style="color: var(--text-secondary);">Açık pozisyon yok.</p>';
-                    }
-                })
-                .catch(error => console.error("Durum alınamadı:", error));
+        // İstatistikler
+        if(data.stats) {
+            const stats = data.stats;
+            const winRateClass = stats.win_rate >= 50 ? 'text-success' : 'text-danger';
+            statsInfo.innerHTML = `
+                <table class="table table-sm">
+                    <tr><th>Toplam PNL</th><td><strong>${stats.total_pnl.toFixed(2)} USDT</strong></td></tr>
+                    <tr><th>Kazanma Oranı</th><td><strong class="${winRateClass}">${stats.win_rate.toFixed(2)}%</strong></td></tr>
+                    <tr><th>Kazanan / Kaybeden</th><td><span class="text-success">${stats.wins}</span> / <span class="text-danger">${stats.losses}</span></td></tr>
+                    <tr><th>Toplam İşlem</th><td>${stats.total_trades}</td></tr>
+                </table>
+            `;
         }
         
-        function fetchHistory() {
-            fetch('/get_trade_history')
-                .then(response => response.json())
-                .then(data => {
-                    const historyBody = document.getElementById('history-body');
-                    historyBody.innerHTML = '';
-                    if (data.history) {
-                        data.history.forEach(trade => {
-                            const pnl = parseFloat(trade[5]);
-                            const pnlColor = pnl >= 0 ? 'var(--success-color)' : 'var(--danger-color)';
-                            const tradeTime = new Date(trade[6]).toLocaleString('tr-TR');
-                            const row = `<tr><td>${trade[0]}</td><td>${trade[1]}</td><td>${trade[2]}</td><td>${trade[3]}</td><td style="color:${pnlColor}">${pnl.toFixed(2)}</td><td>${tradeTime}</td></tr>`;
-                            historyBody.innerHTML += row;
-                        });
-                    }
-                    // İstatistikleri de güncelle
-                    const stats = data.stats;
-                    if(stats){
-                        document.getElementById('stats-total-pnl').textContent = `${stats.total_pnl.toFixed(2)} USDT`;
-                        document.getElementById('stats-winrate').textContent = `${stats.win_rate.toFixed(2)}%`;
-                        document.getElementById('stats-total-trades').textContent = stats.total_trades;
-                        document.getElementById('stats-wins').textContent = stats.wins;
-                        document.getElementById('stats-losses').textContent = stats.losses;
-                    }
-                });
+        // İşlem Geçmişi
+        if(data.all_trades && data.all_trades.length > 0) {
+            tradesHistoryBody.innerHTML = ''; // Temizle
+            data.all_trades.forEach(trade => {
+                const pnlClass = trade[4] > 0 ? 'text-success' : 'text-danger';
+                const date = new Date(trade[5]).toLocaleString('tr-TR');
+                const row = `
+                    <tr>
+                        <td>${date}</td>
+                        <td>${trade[1]}</td>
+                        <td>${trade[3]}</td>
+                        <td class="${pnlClass}">${trade[4].toFixed(2)}</td>
+                        <td>${trade[2]}</td>
+                    </tr>
+                `;
+                tradesHistoryBody.innerHTML += row;
+            });
         }
+    }
+    
+    // --- VERİ ÇEKME DÖNGÜSÜ ---
+    async function fetchStatus() {
+        try {
+            const response = await fetch('/get_status');
+            const data = await response.json();
+            updateLogs(data.logs);
+            updateStatus(data);
+        } catch (error) {
+            console.error('Durum güncellenemedi:', error);
+        }
+    }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            fetchStatus();
-            fetchHistory();
-            setInterval(fetchStatus, 5000);
-        });
-    </script>
+    async function fetchAllSymbols() {
+        try {
+            const response = await fetch('/get_all_symbols');
+            const data = await response.json();
+            if(data.symbols) {
+                symbolSelect.innerHTML = '';
+                data.symbols.forEach(symbol => {
+                    const option = document.createElement('option');
+                    option.value = symbol;
+                    option.textContent = symbol;
+                    symbolSelect.appendChild(option);
+                });
+                // Aktif sembolü seçili getir
+                symbolSelect.value = activeSymbolText.textContent;
+            }
+        } catch (error) {
+            console.error('Semboller çekilemedi:', error);
+        }
+    }
+
+    // Sayfa yüklendiğinde ve sonrasında periyodik olarak veri çek
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchStatus();
+        fetchAllSymbols();
+        setInterval(fetchStatus, 3000); // Her 3 saniyede bir durumu güncelle
+    });
+</script>
+
 </body>
 </html>
