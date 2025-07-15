@@ -1,4 +1,4 @@
-# app.py (WebSocket Uyumlu Nihai Versiyon)
+# app.py (Redis Hatası Düzeltmesi)
 
 import os
 import threading
@@ -6,16 +6,16 @@ from typing import Optional
 from flask import (Flask, flash, jsonify, redirect, render_template, request,
                    session, url_for)
 from flask_socketio import SocketIO
-# trading_bot.py dosyasından TradingBot sınıfını import et
 from trading_bot import TradingBot
 
 # --- 1. UYGULAMA VE WEBSOCKET KURULUMU ---
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'yerel_test_icin_rastgele_bir_anahtar_12345')
 
-# WebSocket sunucusunu Flask uygulamasına bağlıyoruz.
-# 'eventlet', Render.com'da Gunicorn ile en uyumlu ve performanslı çalışandır.
-socketio = SocketIO(app, async_mode='eventlet')
+# --- DEĞİŞİKLİK BURADA ---
+# message_queue=None parametresi ekleyerek Redis'e bağlanma girişimini devre dışı bırakıyoruz.
+# Bu, [Errno 111] hatasını kesin olarak çözecektir.
+socketio = SocketIO(app, async_mode='eventlet', message_queue=None)
 
 
 # --- 2. GÜVENLİK AYARLARI ---
@@ -24,25 +24,21 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 
 
 # --- 3. BOT YÖNETİMİ ---
-# Bu global değişkenler, botun tek bir kopyasını tüm uygulama boyunca canlı tutar.
 bot: Optional[TradingBot] = None
 bot_thread: Optional[threading.Thread] = None
 
 
 # --- 4. GERİ BİLDİRİM (CALLBACK) FONKSİYONLARI ---
-# Bu fonksiyonlar, botun içinden web arayüzüne anlık veri göndermek için kullanılır.
 
 def log_handler(message: str):
     """Bot'tan gelen log mesajlarını web arayüzüne anında gönderir."""
-    # 'log_message' olayını tetikleyerek veriyi tarayıcıya yolla
     socketio.emit('log_message', {'data': message})
 
 def ui_update_handler():
-    """Bot'taki önemli bir değişiklikten sonra (pozisyon açma/kapama gibi) arayüzün tamamını günceller."""
+    """Bot'taki önemli bir değişiklikten sonra arayüzün tamamını günceller."""
     if bot:
         position_data = bot.get_current_position_data()
         stats_data = bot.get_stats_data()
-        # 'full_update' olayını tetikleyerek güncel verileri yolla
         socketio.emit('full_update', {
             'position': position_data,
             'stats': stats_data
@@ -50,12 +46,10 @@ def ui_update_handler():
 
 def bot_status_handler(is_active: bool, symbol: str):
     """Botun çalışma durumunu (başladı/durdu) arayüze anında bildirir."""
-    # 'bot_status_update' olayını tetikleyerek durumu yolla
     socketio.emit('bot_status_update', {'status': is_active, 'symbol': symbol})
 
 
 # --- 5. WEB SAYFALARI (ROUTES) ---
-# Bu fonksiyonlar sadece sayfa gezinimini yönetir.
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -66,8 +60,6 @@ def login():
             session['logged_in'] = True
             if bot is None:
                 try:
-                    # Bot objesi sadece ilk başarılı girişte bir kez oluşturulur.
-                    # Callback fonksiyonları bot'a iletilir ki bot arayüzle konuşabilsin.
                     bot = TradingBot(
                         log_callback=log_handler, 
                         ui_update_callback=ui_update_handler,
@@ -83,41 +75,34 @@ def login():
 
 @app.route('/')
 def index():
-    """Ana sayfayı, giriş yapılmamışsa login'e, yapılmışsa dashboard'a yönlendirir."""
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     return redirect(url_for('dashboard'))
 
 @app.route('/dashboard')
 def dashboard():
-    """Ana kontrol panelini gösterir."""
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     return render_template('dashboard.html')
 
 @app.route('/logout')
 def logout():
-    """Kullanıcı oturumunu sonlandırır."""
     session.pop('logged_in', None)
     flash('Başarıyla çıkış yaptınız.')
     return redirect(url_for('login'))
 
 
 # --- 6. WEBSOCKET OLAYLARI (EVENTS) ---
-# Arayüz ile sunucu arasındaki anlık iletişimi yönetir.
 
 @socketio.on('connect')
 def handle_connect():
-    """Bir kullanıcı arayüze bağlandığında tetiklenir."""
     print('Client connected to WebSocket')
     if bot:
-        # Yeni bağlanan kullanıcıya mevcut durumu hemen gönder.
         bot_status_handler(bot.strategy_active, bot.active_symbol)
         ui_update_handler()
 
 @socketio.on('get_initial_data')
 def handle_get_initial_data():
-    """Arayüzün, sayfa yüklendiğinde ihtiyaç duyduğu statik verileri (sembol listesi vb.) istemesi üzerine tetiklenir."""
     if bot:
         all_symbols = bot.get_all_usdt_symbols()
         all_trades = bot.get_all_trades_data()
@@ -128,32 +113,28 @@ def handle_get_initial_data():
 
 
 # --- 7. KONTROL İÇİN API ENDPOINTS (HTTP) ---
-# Arayüzdeki butonların botu kontrol etmesini sağlar.
 
 @app.route('/start_bot', methods=['POST'])
 def start_bot():
-    """Arayüzden gelen 'Başlat' komutunu işler."""
     global bot_thread
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     
     if not bot.strategy_active:
-        # Botun ana dinleme döngüsünü ayrı bir thread'de başlatır ki web sunucusu kilitlenmesin.
         bot_thread = threading.Thread(target=bot.start_strategy, daemon=True)
         bot_thread.start()
     return jsonify({"status": "success"})
 
 @app.route('/stop_bot', methods=['POST'])
 def stop_bot():
-    """Arayüzden gelen 'Durdur' komutunu işler."""
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     
     if bot.strategy_active:
         bot.stop_strategy()
     return jsonify({"status": "success"})
 
+# ... (Diğer tüm HTTP route'ları aynı kalır)
 @app.route('/manual_trade', methods=['POST'])
 def manual_trade():
-    """Arayüzden gelen manuel işlem talebini işler."""
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     side = request.get_json().get('side')
     if side in ['LONG', 'SHORT']:
@@ -163,14 +144,12 @@ def manual_trade():
 
 @app.route('/close_position', methods=['POST'])
 def close_position():
-    """Arayüzden gelen pozisyon kapatma talebini işler."""
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     threading.Thread(target=bot.close_current_position, args=(True,)).start()
     return jsonify({"status": "success"})
 
 @app.route('/update_settings', methods=['POST'])
 def update_settings():
-    """Arayüzden gelen kaldıraç ve miktar ayarlarını günceller."""
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     data = request.get_json()
     try:
@@ -182,20 +161,14 @@ def update_settings():
 
 @app.route('/update_symbol', methods=['POST'])
 def update_symbol():
-    """Arayüzden gelen sembol değiştirme talebini işler."""
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     new_symbol = request.get_json().get('symbol')
     if new_symbol:
-        # Botun sembol değiştirme fonksiyonunu ayrı bir thread'de çalıştırmak,
-        # stratejiyi durdurup başlatırken arayüzün takılmasını önler.
         threading.Thread(target=bot.update_active_symbol, args=(new_symbol,)).start()
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Geçersiz sembol"}), 400
 
 
 if __name__ == '__main__':
-    # Bu komut, uygulamayı yerel makinede test etmek içindir.
-    # Render.com gibi production ortamları bu bloğu çalıştırmaz, onun yerine `gunicorn` kullanır.
     print("Starting Flask-SocketIO server for local development...")
     socketio.run(app, debug=True, host='0.0.0.0', port=5001)
-
