@@ -5,11 +5,9 @@ requests
 packaging
 Flask
 gunicorn
-# WebSocket için eklenenler
 Flask-SocketIO
 python-engineio
 simple-websocket
 eventlet
 setuptools
 numpy<2.0
-
