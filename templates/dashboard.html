@@ -6,6 +6,8 @@
     <title>Kontrol Paneli - Trading Bot</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- WebSocket istemci kütüphanesi -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         body { background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
         .card { border: none; }
@@ -34,6 +36,7 @@
     </nav>
 
     <div class="container mt-4">
+        <!-- ANA KONTROLLER -->
         <div class="card shadow-sm mb-4">
             <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <h5 class="mb-0">
@@ -48,6 +51,7 @@
         </div>
 
         <div class="row">
+            <!-- POZİSYON VE İSTATİSTİKLER -->
             <div class="col-lg-5">
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-white"><h5><i class="bi bi-bar-chart-line"></i> Mevcut Pozisyon</h5></div>
@@ -73,6 +77,7 @@
                 </div>
             </div>
 
+            <!-- LOGLAR -->
             <div class="col-lg-7">
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-white"><h5><i class="bi bi-terminal"></i> Bot Logları</h5></div>
@@ -83,6 +88,7 @@
             </div>
         </div>
         
+        <!-- AYARLAR VE GEÇMİŞ -->
         <div class="row">
              <div class="col-12">
                 <div class="card shadow-sm mb-4">
@@ -136,6 +142,9 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        // --- WebSocket Bağlantısını Kur ---
+        const socket = io();
+
         // --- ELEMENT REFERANSLARI ---
         const logContainer = document.getElementById('logs');
         const statusBadge = document.getElementById('bot-status-badge');
@@ -147,7 +156,7 @@
         const symbolSelect = document.getElementById('symbol-select');
         const tradesHistoryBody = document.getElementById('trades-history-body');
 
-        // --- API İSTEKLERİ ---
+        // --- KONTROL FONKSİYONLARI (Sunucuya HTTP isteği gönderir) ---
         async function postData(url, data = {}) {
             try {
                 const response = await fetch(url, {
@@ -158,57 +167,37 @@
                 return await response.json();
             } catch (error) {
                 console.error(`API isteği başarısız: ${url}`, error);
-                alert("Sunucu ile iletişim kurulamadı. Lütfen internet bağlantınızı kontrol edin.");
             }
         }
-
-        // --- KONTROL FONKSİYONLARI ---
+        
         startBtn.addEventListener('click', () => postData('/start_bot'));
         stopBtn.addEventListener('click', () => postData('/stop_bot'));
         
-        window.manualTrade = function(side) {
-            if (confirm(`${side} yönünde manuel işlem açmak istediğinize emin misiniz?`)) {
-                postData('/manual_trade', { side: side });
-            }
-        }
-
-        window.closePosition = function() {
-            if (confirm('Mevcut pozisyonu kapatmak istediğinize emin misiniz?')) {
-                postData('/close_position');
-            }
-        }
-
-        window.updateSymbol = function() {
+        window.manualTrade = (side) => postData('/manual_trade', { side });
+        window.closePosition = () => postData('/close_position');
+        window.updateSymbol = () => {
             const selectedSymbol = symbolSelect.value;
-            if (selectedSymbol) {
-                postData('/update_symbol', { symbol: selectedSymbol });
-            } else {
-                alert("Lütfen listeden bir sembol seçin.");
-            }
-        }
-
-        window.updateSettings = function() {
+            if (selectedSymbol) postData('/update_symbol', { symbol: selectedSymbol });
+        };
+        window.updateSettings = () => {
             const leverage = document.getElementById('leverage-input').value;
             const quantity_usd = document.getElementById('quantity-input').value;
-            postData('/update_settings', { leverage: leverage, quantity_usd: quantity_usd });
-        }
+            postData('/update_settings', { leverage, quantity_usd });
+        };
 
         // --- ARAYÜZ GÜNCELLEME FONKSİYONLARI ---
-        function updateLogs(logs) {
-            if (logs.length > 0) {
-                logs.forEach(log => {
-                    const p = document.createElement('p');
-                    p.textContent = log;
-                    p.className = 'mb-0';
-                    logContainer.appendChild(p);
-                });
-                logContainer.scrollTop = logContainer.scrollHeight;
-            }
-        }
+        const updateLogs = (logs) => {
+            logs.forEach(log => {
+                const p = document.createElement('p');
+                p.textContent = log;
+                p.className = 'mb-0';
+                logContainer.appendChild(p);
+            });
+            logContainer.scrollTop = logContainer.scrollHeight;
+        };
 
-        function updateStatusUI(data) {
-            // Bot durumu
-            if (data.bot_status) {
+        const updateBotStatus = (isActive, symbol) => {
+            if (isActive) {
                 statusBadge.innerHTML = '<span class="badge bg-success status-badge"><i class="bi bi-check-circle-fill"></i> Çalışıyor</span>';
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
@@ -217,11 +206,11 @@
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
             }
-            activeSymbolText.textContent = data.active_symbol || 'N/A';
+            activeSymbolText.textContent = symbol || 'N/A';
+        };
 
-            // Pozisyon bilgisi
-            if (data.position) {
-                const pos = data.position;
+        const updatePositionInfo = (pos) => {
+            if (pos) {
                 const pnl = parseFloat(pos.pnl_usdt);
                 const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
                 const pnlIcon = pnl >= 0 ? '<i class="bi bi-arrow-up-right"></i>' : '<i class="bi bi-arrow-down-left"></i>';
@@ -237,15 +226,14 @@
                         <tr><th>Anlık Fiyat</th><td>${pos.mark_price}</td></tr>
                         <tr><th>TP / SL</th><td>${pos.tp_price} / ${pos.sl_price}</td></tr>
                         <tr><th>PnL / ROI</th><td class="${pnlClass}">${pnlIcon} ${pos.pnl_usdt} USDT / ${pos.roi_percent}%</td></tr>
-                    </table>
-                `;
+                    </table>`;
             } else {
                 positionInfo.innerHTML = '<p class="text-muted text-center py-5">Açık pozisyon bulunmuyor.</p>';
             }
+        };
 
-            // İstatistikler
-            if (data.stats) {
-                const stats = data.stats;
+        const updateStatsInfo = (stats) => {
+            if (stats) {
                 const winRateClass = stats.win_rate >= 50 ? 'text-success' : 'text-danger';
                 statsInfo.innerHTML = `
                     <table class="table table-sm table-borderless">
@@ -253,79 +241,64 @@
                         <tr><th>Kazanma Oranı</th><td class="${winRateClass}">${stats.win_rate.toFixed(2)}%</td></tr>
                         <tr><th>Kazanan / Kaybeden</th><td><span class="text-success">${stats.wins}</span> / <span class="text-danger">${stats.losses}</span></td></tr>
                         <tr><th>Toplam İşlem</th><td>${stats.total_trades}</td></tr>
-                    </table>
-                `;
+                    </table>`;
+            } else {
+                 statsInfo.innerHTML = '<p class="text-muted text-center py-3">Veriler yükleniyor...</p>';
             }
-            
-            // İşlem Geçmişi
-            if (data.all_trades && data.all_trades.length > 0) {
+        };
+
+        const updateTradeHistory = (trades) => {
+            if (trades && trades.length > 0) {
                 tradesHistoryBody.innerHTML = '';
-                data.all_trades.forEach(trade => {
+                trades.forEach(trade => {
                     const pnlClass = trade[4] >= 0 ? 'pnl-positive' : 'pnl-negative';
                     const date = new Date(trade[5]).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
-                    const row = `
+                    tradesHistoryBody.innerHTML += `
                         <tr>
                             <td>${date}</td>
                             <td>${trade[1]}</td>
                             <td>${trade[3]}</td>
                             <td class="${pnlClass}">${trade[4].toFixed(2)}</td>
                             <td>${trade[2]}</td>
-                        </tr>
-                    `;
-                    tradesHistoryBody.innerHTML += row;
+                        </tr>`;
                 });
             } else {
                  tradesHistoryBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Geçmiş işlem bulunmuyor.</td></tr>';
             }
-        }
-        
-        // --- VERİ ÇEKME DÖNGÜSÜ ---
-        async function fetchStatus() {
-            try {
-                const response = await fetch('/get_status');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                updateLogs(data.logs);
-                updateStatusUI(data);
-            } catch (error) {
-                console.error('Durum güncellenemedi:', error);
-            }
-        }
+        };
 
-        async function fetchAllSymbols() {
-            try {
-                const response = await fetch('/get_all_symbols');
-                const data = await response.json();
-                if (data.symbols && data.symbols.length > 0) {
-                    const currentSymbol = activeSymbolText.textContent;
-                    symbolSelect.innerHTML = '';
-                    data.symbols.forEach(symbol => {
-                        const option = document.createElement('option');
-                        option.value = symbol;
-                        option.textContent = symbol;
-                        if (symbol === currentSymbol) {
-                            option.selected = true;
-                        }
-                        symbolSelect.appendChild(option);
-                    });
-                } else {
-                    symbolSelect.innerHTML = '<option>Semboller yüklenemedi</option>';
-                }
-            } catch (error) {
-                console.error('Semboller çekilemedi:', error);
+        const populateSymbolSelect = (symbols) => {
+            if (symbols && symbols.length > 0) {
+                const currentSymbol = activeSymbolText.textContent;
+                symbolSelect.innerHTML = '';
+                symbols.forEach(symbol => {
+                    const option = document.createElement('option');
+                    option.value = symbol;
+                    option.textContent = symbol;
+                    if (symbol === currentSymbol) option.selected = true;
+                    symbolSelect.appendChild(option);
+                });
+            } else {
+                symbolSelect.innerHTML = '<option>Yüklenemedi</option>';
             }
-        }
+        };
 
-        // Sayfa yüklendiğinde ve sonrasında periyodik olarak veri çek
-        (async () => {
-            await fetchStatus(); // İlk durum ve sembol adını yükle
-            await fetchAllSymbols(); // Sembolleri doldur
-            
-            // IP banını önlemek için güncelleme sıklığını 15 saniyeye yavaşlatıyoruz.
-            setInterval(fetchStatus, 15000); 
-        })();
+        // --- WEBSOCKET OLAY DİNLEYİCİLERİ ---
+        socket.on('connect', () => {
+            console.log('Sunucuya WebSocket ile bağlanıldı!');
+            socket.emit('get_initial_data');
+        });
+
+        socket.on('log_message', (msg) => updateLogs([msg.data]));
+        socket.on('initial_data', (data) => {
+            populateSymbolSelect(data.symbols);
+            updateTradeHistory(data.trades);
+        });
+        socket.on('full_update', (data) => {
+            updatePositionInfo(data.position);
+            updateStatsInfo(data.stats);
+        });
+        socket.on('bot_status_update', (data) => updateBotStatus(data.status, data.symbol));
     });
 </script>
 
