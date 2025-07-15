@@ -2,27 +2,25 @@ services:
   - type: web
     name: trading-bot-websocket
     env: python
-    plan: free  # Ücretsiz Render planı. Uykudan uyanma süresi olabilir.
+    plan: free
 
-    # Gereken Python paketlerini yüklüyoruz
     buildCommand: >
       pip install --upgrade pip &&
       pip install -r requirements.txt
 
-    # WebSocket desteği için Gunicorn'u 'eventlet' worker ile başlatıyoruz
     startCommand: >
       gunicorn --worker-class eventlet -w 1 app:app
 
     envVars:
       - key: FLASK_SECRET_KEY
-        generateValue: true  # Otomatik güvenli anahtar üret
+        generateValue: true
       - key: ADMIN_USERNAME
-        sync: false          # Giriş için yönetici adı
+        sync: false
       - key: ADMIN_PASSWORD
-        sync: false          # Giriş için yönetici şifresi
+        sync: false
       - key: BINANCE_API_KEY
-        sync: false          # Binance API anahtarı (opsiyonel)
+        sync: false
       - key: BINANCE_API_SECRET
-        sync: false          # Binance gizli anahtarı (opsiyonel)
+        sync: false
       - key: PYTHON_VERSION
-        value: 3.11.8        # Python 3.11.x ile stabil çalışır
+        value: 3.11.8
