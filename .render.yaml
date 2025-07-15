@@ -2,21 +2,26 @@
 
 services:
   - type: web
-    name: trading-bot-flask
+    name: trading-bot-websocket
     env: python
-    plan: free # Veya ihtiyacınıza göre başka bir plan
+    # Render'ın ücretsiz planı bazen uyku moduna geçebilir. 
+    # Botun 7/24 çalışması için ücretli bir plana geçmek gerekebilir.
+    plan: free 
     buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
-    startCommand: "gunicorn app:app"
+    # --- DEĞİŞİKLİK BURADA ---
+    # Gunicorn'u, WebSocket ile uyumlu 'eventlet' çalışanı ile başlatıyoruz.
+    # Bu, 'WORKER TIMEOUT' hatasını kesin olarak çözecektir.
+    startCommand: "gunicorn --worker-class eventlet -w 1 app:app"
     envVars:
       - key: FLASK_SECRET_KEY
-        generateValue: true # Render sizin için rastgele bir anahtar oluşturur
+        generateValue: true
       - key: ADMIN_USERNAME
-        value: admin # Burayı Render arayüzünden değiştirin
+        sync: false
       - key: ADMIN_PASSWORD
-        sync: false # Render'a bu değeri manuel gireceğinizi belirtir
+        sync: false
       - key: BINANCE_API_KEY
         sync: false
       - key: BINANCE_API_SECRET
         sync: false
       - key: PYTHON_VERSION
-        value: 3.10.6 # Kullandığınız Python sürümü
+        value: 3.11.8 # Stabil bir Python versiyonu kullanmak önemlidir.
