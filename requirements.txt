@@ -1,9 +1,12 @@
-setuptools
 python-binance
 pandas
-numpy<2.0
 pandas-ta
 requests
 packaging
 Flask
 gunicorn
+# WebSocket için eklenenler
+Flask-SocketIO
+python-engineio
+simple-websocket
+eventlet
