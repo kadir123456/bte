@@ -10,3 +10,5 @@ Flask-SocketIO
 python-engineio
 simple-websocket
 eventlet
+setuptools
+
