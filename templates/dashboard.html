@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kontrol Paneli - Trading Bot</title>
+    <!-- Stil Dosyaları -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <!-- WebSocket istemci kütüphanesi -->
+    <!-- WebSocket İstemci Kütüphanesi -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         body { background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
@@ -28,6 +29,7 @@
     </style>
 </head>
 <body>
+    <!-- 1. Navigasyon Çubuğu -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
         <div class="container-fluid">
             <a class="navbar-brand" href="#"><i class="bi bi-robot"></i> Trading Bot Kontrol Paneli</a>
@@ -35,12 +37,13 @@
         </div>
     </nav>
 
+    <!-- 2. Ana İçerik Alanı -->
     <div class="container mt-4">
         <!-- ANA KONTROLLER -->
         <div class="card shadow-sm mb-4">
             <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <h5 class="mb-0">
-                    <span id="bot-status-badge"></span>
+                    <span id="bot-status-badge"><span class="badge bg-secondary status-badge">Bağlanılıyor...</span></span>
                     | Aktif Sembol: <strong id="active-symbol-text">Yükleniyor...</strong>
                 </h5>
                 <div class="d-flex gap-2">
@@ -51,12 +54,12 @@
         </div>
 
         <div class="row">
-            <!-- POZİSYON VE İSTATİSTİKLER -->
+            <!-- Sol Sütun: Pozisyon ve İstatistikler -->
             <div class="col-lg-5">
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-white"><h5><i class="bi bi-bar-chart-line"></i> Mevcut Pozisyon</h5></div>
                     <div class="card-body card-body-small-padding" id="position-info">
-                        <p class="text-muted text-center py-5">Açık pozisyon bulunmuyor.</p>
+                        <p class="text-muted text-center py-5">Veriler yükleniyor...</p>
                     </div>
                 </div>
 
@@ -77,7 +80,7 @@
                 </div>
             </div>
 
-            <!-- LOGLAR -->
+            <!-- Sağ Sütun: Loglar -->
             <div class="col-lg-7">
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-white"><h5><i class="bi bi-terminal"></i> Bot Logları</h5></div>
@@ -88,7 +91,7 @@
             </div>
         </div>
         
-        <!-- AYARLAR VE GEÇMİŞ -->
+        <!-- Alt Satır: Ayarlar ve İşlem Geçmişi -->
         <div class="row">
              <div class="col-12">
                 <div class="card shadow-sm mb-4">
@@ -98,7 +101,7 @@
                             <div class="col-md-5">
                                 <label for="symbol-select" class="form-label">İşlem Yapılacak Sembol</label>
                                 <div class="input-group">
-                                    <select class="form-select" id="symbol-select" aria-label="Sembol Seçimi"></select>
+                                    <select class="form-select" id="symbol-select" aria-label="Sembol Seçimi"><option>Yükleniyor...</option></select>
                                     <button class="btn btn-primary" onclick="updateSymbol()">Uygula</button>
                                 </div>
                             </div>
@@ -142,10 +145,10 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- WebSocket Bağlantısını Kur ---
+        // --- 1. WEBSOCKET BAĞLANTISINI KUR ---
         const socket = io();
 
-        // --- ELEMENT REFERANSLARI ---
+        // --- 2. ELEMENT REFERANSLARI ---
         const logContainer = document.getElementById('logs');
         const statusBadge = document.getElementById('bot-status-badge');
         const activeSymbolText = document.getElementById('active-symbol-text');
@@ -156,7 +159,7 @@
         const symbolSelect = document.getElementById('symbol-select');
         const tradesHistoryBody = document.getElementById('trades-history-body');
 
-        // --- KONTROL FONKSİYONLARI (Sunucuya HTTP isteği gönderir) ---
+        // --- 3. KONTROL FONKSİYONLARI (Sunucuya HTTP isteği gönderir) ---
         async function postData(url, data = {}) {
             try {
                 const response = await fetch(url, {
@@ -185,7 +188,7 @@
             postData('/update_settings', { leverage, quantity_usd });
         };
 
-        // --- ARAYÜZ GÜNCELLEME FONKSİYONLARI ---
+        // --- 4. ARAYÜZ GÜNCELLEME FONKSİYONLARI ---
         const updateLogs = (logs) => {
             logs.forEach(log => {
                 const p = document.createElement('p');
@@ -279,26 +282,32 @@
                     symbolSelect.appendChild(option);
                 });
             } else {
-                symbolSelect.innerHTML = '<option>Yüklenemedi</option>';
+                symbolSelect.innerHTML = '<option>Semboller yüklenemedi</option>';
             }
         };
 
-        // --- WEBSOCKET OLAY DİNLEYİCİLERİ ---
+        // --- 5. WEBSOCKET OLAY DİNLEYİCİLERİ ---
         socket.on('connect', () => {
             console.log('Sunucuya WebSocket ile bağlanıldı!');
+            // Bağlanır bağlanmaz ilk verileri iste
             socket.emit('get_initial_data');
         });
 
         socket.on('log_message', (msg) => updateLogs([msg.data]));
+        
         socket.on('initial_data', (data) => {
             populateSymbolSelect(data.symbols);
             updateTradeHistory(data.trades);
         });
+        
         socket.on('full_update', (data) => {
             updatePositionInfo(data.position);
             updateStatsInfo(data.stats);
         });
-        socket.on('bot_status_update', (data) => updateBotStatus(data.status, data.symbol));
+        
+        socket.on('bot_status_update', (data) => {
+            updateBotStatus(data.status, data.symbol);
+        });
     });
 </script>
 
