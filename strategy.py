@@ -15,7 +15,6 @@ def get_signal(df: pd.DataFrame, config: configparser.SectionProxy) -> Tuple[str
     Returns:
         Tuple[str, float]: ('Sinyal', ATR Değeri) -> ('LONG', 0.0025)
     """
-    # --- Strateji parametrelerini config'den oku ---
     ema_fast_len = int(config['ema_length_fast'])
     ema_slow_len = int(config['ema_length_slow'])
     rsi_len = int(config['rsi_length'])
@@ -23,40 +22,24 @@ def get_signal(df: pd.DataFrame, config: configparser.SectionProxy) -> Tuple[str
     rsi_os = int(config['rsi_oversold'])
     atr_len = int(config['atr_length'])
 
-    # --- Gerekli tüm indikatörleri hesapla ---
-    df.ta.ema(length=ema_fast_len, append=True)
-    df.ta.ema(length=ema_slow_len, append=True)
-    df.ta.rsi(length=rsi_len, append=True)
-    df.ta.atr(length=atr_len, append=True)
-    
-    # İndikatör sütunlarının isimlerini belirle
-    ema_fast_col = f"EMA_{ema_fast_len}"
-    ema_slow_col = f"EMA_{ema_slow_len}"
-    rsi_col = f"RSI_{rsi_len}"
-    atr_col = f"ATRr_{atr_len}"
+    df[f"EMA_{ema_fast_len}"] = ta.ema(df['close'], length=ema_fast_len)
+    df[f"EMA_{ema_slow_len}"] = ta.ema(df['close'], length=ema_slow_len)
+    df[f"RSI_{rsi_len}"] = ta.rsi(df['close'], length=rsi_len)
+    df[f"ATR_{atr_len}"] = ta.atr(df['high'], df['low'], df['close'], length=atr_len)
 
-    # Karşılaştırma için son iki mumu al
     latest = df.iloc[-2]
     prev = df.iloc[-3]
 
-    # --- Sinyal Koşullarını Belirle ---
+    ema_bull_cross = (latest[f"EMA_{ema_fast_len}"] > latest[f"EMA_{ema_slow_len}"]) and (prev[f"EMA_{ema_fast_len}"] <= prev[f"EMA_{ema_slow_len}"])
+    ema_bear_cross = (latest[f"EMA_{ema_fast_len}"] < latest[f"EMA_{ema_slow_len}"]) and (prev[f"EMA_{ema_fast_len}"] >= prev[f"EMA_{ema_slow_len}"])
 
-    # 1. EMA Kesişimi Koşulu: Hızlı EMA, yavaş EMA'yı yeni kesmiş olmalı.
-    ema_bull_cross = latest[ema_fast_col] > latest[ema_slow_col] and prev[ema_fast_col] <= prev[ema_slow_col]
-    ema_bear_cross = latest[ema_fast_col] < latest[ema_slow_col] and prev[ema_fast_col] >= prev[ema_slow_col]
+    rsi_confirm_long = latest[f"RSI_{rsi_len}"] > rsi_os
+    rsi_confirm_short = latest[f"RSI_{rsi_len}"] < rsi_ob
 
-    # 2. RSI Onay Koşulu: Fiyatın aşırı bölgeden 'dönüyor' olması.
-    rsi_confirm_long = latest[rsi_col] > rsi_os
-    rsi_confirm_short = latest[rsi_col] < rsi_ob
-    
-    # --- Nihai Sinyali Oluştur ---
-    # Eğer bir yükseliş kesişimi varsa VE RSI aşırı satım bölgesinden çıkmışsa LONG sinyali ver.
     if ema_bull_cross and rsi_confirm_long:
-        return 'LONG', latest[atr_col]
-    
-    # Eğer bir düşüş kesişimi varsa VE RSI aşırı alım bölgesinden çıkmışsa SHORT sinyali ver.
+        return 'LONG', latest[f"ATR_{atr_len}"]
+
     if ema_bear_cross and rsi_confirm_short:
-        return 'SHORT', latest[atr_col]
-        
-    # Eğer hiçbir koşul sağlanmıyorsa BEKLE.
-    return 'WAIT', 0
+        return 'SHORT', latest[f"ATR_{atr_len}"]
+
+    return 'WAIT', 0.0
