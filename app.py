@@ -33,6 +33,7 @@ bot_thread: Optional[threading.Thread] = None
 
 def log_handler(message: str):
     """Bot'tan gelen log mesajlarını web arayüzüne anında gönderir."""
+    # 'log_message' olayını tetikleyerek veriyi tarayıcıya yolla
     socketio.emit('log_message', {'data': message})
 
 def ui_update_handler():
@@ -40,6 +41,7 @@ def ui_update_handler():
     if bot:
         position_data = bot.get_current_position_data()
         stats_data = bot.get_stats_data()
+        # 'full_update' olayını tetikleyerek güncel verileri yolla
         socketio.emit('full_update', {
             'position': position_data,
             'stats': stats_data
@@ -47,6 +49,7 @@ def ui_update_handler():
 
 def bot_status_handler(is_active: bool, symbol: str):
     """Botun çalışma durumunu (başladı/durdu) arayüze anında bildirir."""
+    # 'bot_status_update' olayını tetikleyerek durumu yolla
     socketio.emit('bot_status_update', {'status': is_active, 'symbol': symbol})
 
 
@@ -63,7 +66,7 @@ def login():
             if bot is None:
                 try:
                     # Bot objesi sadece ilk başarılı girişte bir kez oluşturulur.
-                    # Callback fonksiyonları bot'a iletilir.
+                    # Callback fonksiyonları bot'a iletilir ki bot arayüzle konuşabilsin.
                     bot = TradingBot(
                         log_callback=log_handler, 
                         ui_update_callback=ui_update_handler,
@@ -133,7 +136,7 @@ def start_bot():
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     
     if not bot.strategy_active:
-        # Botun ana dinleme döngüsünü ayrı bir thread'de başlatır.
+        # Botun ana dinleme döngüsünü ayrı bir thread'de başlatır ki web sunucusu kilitlenmesin.
         bot_thread = threading.Thread(target=bot.start_strategy, daemon=True)
         bot_thread.start()
     return jsonify({"status": "success"})
@@ -149,22 +152,24 @@ def stop_bot():
 
 @app.route('/manual_trade', methods=['POST'])
 def manual_trade():
+    """Arayüzden gelen manuel işlem talebini işler."""
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     side = request.get_json().get('side')
     if side in ['LONG', 'SHORT']:
-        # Manuel işlemleri de ayrı thread'lerde başlatmak, arayüzün donmasını engeller.
         threading.Thread(target=bot.manual_trade, args=(side,)).start()
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Geçersiz işlem yönü"}), 400
 
 @app.route('/close_position', methods=['POST'])
 def close_position():
+    """Arayüzden gelen pozisyon kapatma talebini işler."""
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     threading.Thread(target=bot.close_current_position, args=(True,)).start()
     return jsonify({"status": "success"})
 
 @app.route('/update_settings', methods=['POST'])
 def update_settings():
+    """Arayüzden gelen kaldıraç ve miktar ayarlarını günceller."""
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     data = request.get_json()
     try:
@@ -176,10 +181,13 @@ def update_settings():
 
 @app.route('/update_symbol', methods=['POST'])
 def update_symbol():
+    """Arayüzden gelen sembol değiştirme talebini işler."""
     if not session.get('logged_in') or not bot: return jsonify({"status": "error"}), 401
     new_symbol = request.get_json().get('symbol')
     if new_symbol:
-        bot.update_active_symbol(new_symbol)
+        # Botun sembol değiştirme fonksiyonunu ayrı bir thread'de çalıştırmak,
+        # stratejiyi durdurup başlatırken arayüzün takılmasını önler.
+        threading.Thread(target=bot.update_active_symbol, args=(new_symbol,)).start()
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Geçersiz sembol"}), 400
 
@@ -189,4 +197,3 @@ if __name__ == '__main__':
     # Render.com gibi production ortamları bu bloğu çalıştırmaz, onun yerine `gunicorn` kullanır.
     print("Starting Flask-SocketIO server for local development...")
     socketio.run(app, debug=True, host='0.0.0.0', port=5001)
-
