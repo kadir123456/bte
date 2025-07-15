@@ -6,9 +6,10 @@ from typing import Optional
 from flask import (Flask, flash, jsonify, redirect, render_template, request,
                    session, url_for)
 from flask_socketio import SocketIO
+# trading_bot.py dosyasından TradingBot sınıfını import et
 from trading_bot import TradingBot
 
-# --- UYGULAMA KURULUMU ---
+# --- 1. UYGULAMA VE WEBSOCKET KURULUMU ---
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'yerel_test_icin_rastgele_bir_anahtar_12345')
 
@@ -17,18 +18,18 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'yerel_test_icin_rastgele_bi
 socketio = SocketIO(app, async_mode='eventlet')
 
 
-# --- GÜVENLİK ---
+# --- 2. GÜVENLİK AYARLARI ---
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 
 
-# --- BOT YÖNETİMİ ---
+# --- 3. BOT YÖNETİMİ ---
 # Bu global değişkenler, botun tek bir kopyasını tüm uygulama boyunca canlı tutar.
 bot: Optional[TradingBot] = None
 bot_thread: Optional[threading.Thread] = None
 
 
-# --- GERİ BİLDİRİM (CALLBACK) FONKSİYONLARI ---
+# --- 4. GERİ BİLDİRİM (CALLBACK) FONKSİYONLARI ---
 # Bu fonksiyonlar, botun içinden web arayüzüne anlık veri göndermek için kullanılır.
 
 def log_handler(message: str):
@@ -53,7 +54,7 @@ def bot_status_handler(is_active: bool, symbol: str):
     socketio.emit('bot_status_update', {'status': is_active, 'symbol': symbol})
 
 
-# --- WEB SAYFALARI (ROUTES) ---
+# --- 5. WEB SAYFALARI (ROUTES) ---
 # Bu fonksiyonlar sadece sayfa gezinimini yönetir.
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -102,7 +103,7 @@ def logout():
     return redirect(url_for('login'))
 
 
-# --- WEBSOCKET OLAYLARI (EVENTS) ---
+# --- 6. WEBSOCKET OLAYLARI (EVENTS) ---
 # Arayüz ile sunucu arasındaki anlık iletişimi yönetir.
 
 @socketio.on('connect')
@@ -126,7 +127,7 @@ def handle_get_initial_data():
         })
 
 
-# --- KONTROL İÇİN API ENDPOINTS (HTTP) ---
+# --- 7. KONTROL İÇİN API ENDPOINTS (HTTP) ---
 # Arayüzdeki butonların botu kontrol etmesini sağlar.
 
 @app.route('/start_bot', methods=['POST'])
@@ -197,3 +198,4 @@ if __name__ == '__main__':
     # Render.com gibi production ortamları bu bloğu çalıştırmaz, onun yerine `gunicorn` kullanır.
     print("Starting Flask-SocketIO server for local development...")
     socketio.run(app, debug=True, host='0.0.0.0', port=5001)
+
