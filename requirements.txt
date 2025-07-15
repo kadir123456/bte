@@ -11,4 +11,5 @@ python-engineio
 simple-websocket
 eventlet
 setuptools
+numpy<2.0
 
