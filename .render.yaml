@@ -1,27 +1,28 @@
-# render.yaml
-
 services:
   - type: web
     name: trading-bot-websocket
     env: python
-    # Render'ın ücretsiz planı bazen uyku moduna geçebilir. 
-    # Botun 7/24 çalışması için ücretli bir plana geçmek gerekebilir.
-    plan: free 
-    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
-    # --- DEĞİŞİKLİK BURADA ---
-    # Gunicorn'u, WebSocket ile uyumlu 'eventlet' çalışanı ile başlatıyoruz.
-    # Bu, 'WORKER TIMEOUT' hatasını kesin olarak çözecektir.
-    startCommand: "gunicorn --worker-class eventlet -w 1 app:app"
+    plan: free  # Ücretsiz Render planı. Uykudan uyanma süresi olabilir.
+
+    # Gereken Python paketlerini yüklüyoruz
+    buildCommand: >
+      pip install --upgrade pip &&
+      pip install -r requirements.txt
+
+    # WebSocket desteği için Gunicorn'u 'eventlet' worker ile başlatıyoruz
+    startCommand: >
+      gunicorn --worker-class eventlet -w 1 app:app
+
     envVars:
       - key: FLASK_SECRET_KEY
-        generateValue: true
+        generateValue: true  # Otomatik güvenli anahtar üret
       - key: ADMIN_USERNAME
-        sync: false
+        sync: false          # Giriş için yönetici adı
       - key: ADMIN_PASSWORD
-        sync: false
+        sync: false          # Giriş için yönetici şifresi
       - key: BINANCE_API_KEY
-        sync: false
+        sync: false          # Binance API anahtarı (opsiyonel)
       - key: BINANCE_API_SECRET
-        sync: false
+        sync: false          # Binance gizli anahtarı (opsiyonel)
       - key: PYTHON_VERSION
-        value: 3.11.8 # Stabil bir Python versiyonu kullanmak önemlidir.
+        value: 3.11.8        # Python 3.11.x ile stabil çalışır
